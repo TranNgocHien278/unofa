@@ -3,3 +3,8 @@
 
 # Env
 .env
+config.yaml
+node_modules/
+dist/
+/unofa
+*.out
