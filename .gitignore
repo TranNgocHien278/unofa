@@ -8,3 +8,7 @@ node_modules/
 dist/
 /unofa
 *.out
+
+# build output
+/migrate
+/unofa
