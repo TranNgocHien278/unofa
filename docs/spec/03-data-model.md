@@ -22,7 +22,7 @@ CREATE TABLE users (
     created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
 
     CONSTRAINT balance_floor CHECK (user_id = 0 OR balance >= 0),
-    CONSTRAINT username_lower CHECK (username = lower(username))
+    CONSTRAINT username_lower CHECK (user_id = 0 OR username = lower(username))
 );
 
 CREATE SEQUENCE users_seq START 1;
