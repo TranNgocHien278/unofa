@@ -32,6 +32,7 @@ const (
 	LoanNotActive       Code = "LOAN_NOT_ACTIVE"
 	InvalidLoanProduct  Code = "INVALID_LOAN_PRODUCT"
 	InvalidStake        Code = "INVALID_STAKE"
+	InvalidRequest      Code = "INVALID_REQUEST"
 
 	RoomNotFound       Code = "ROOM_NOT_FOUND"
 	RoomFull           Code = "ROOM_FULL"
@@ -67,7 +68,7 @@ var status = map[Code]int{
 	PasswordTooShort: 400, PasswordTooLong: 400, RateLimited: 429,
 	InsufficientBalance: 400, TransferLimit: 400, SelfTransfer: 400, UserNotFound: 404,
 	LoanOverdue: 403, LoanActiveExists: 409, LoanNotFound: 404, LoanNotActive: 400,
-	InvalidLoanProduct: 400, InvalidStake: 400,
+	InvalidLoanProduct: 400, InvalidStake: 400, InvalidRequest: 400,
 	RoomNotFound: 404, RoomFull: 409, RoomLocked: 409, AlreadyInRoom: 409,
 	NotHost: 403, NotEnoughPlayers: 400, NotInMatch: 403, MatchEnded: 409,
 	UserInMatch: 409, ServiceUnavailable: 503, Internal: 500,

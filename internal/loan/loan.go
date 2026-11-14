@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/unofa/unofa/internal/errs"
 	"github.com/unofa/unofa/internal/ledger"
@@ -20,9 +21,9 @@ import (
 
 // Term names matching docs/spec/03-data-model.md §Loan.
 const (
-	Term24h  = "24h"
-	Term3d   = "3d"
-	Term30d  = "30d"
+	Term24h = "24h"
+	Term3d  = "3d"
+	Term30d = "30d"
 )
 
 // TermCfg is one entry in LoanCfg.Terms.
@@ -53,13 +54,13 @@ type Loan struct {
 
 // ActiveLoan is the shape returned by Active (04 §GET /api/loans/active).
 type ActiveLoan struct {
-	LoanID        int64
-	Principal     int64
-	DueAt         time.Time
-	OwendNow      int64
-	Overdue       bool
+	LoanID         int64
+	Principal      int64
+	DueAt          time.Time
+	OwendNow       int64
+	Overdue        bool
 	PeriodsOverdue int
-	SeizeAt       time.Time
+	SeizeAt        time.Time
 }
 
 // SeizedLoan is returned by SeizeDue for each loan seized in the hourly job.
@@ -304,7 +305,7 @@ func DeleteAccount(ctx context.Context, tx pgx.Tx, userID int64, now time.Time, 
 		`SELECT EXISTS (
 			SELECT 1 FROM match_players mp
 			JOIN matches m ON m.match_id = mp.match_id
-			WHERE mp.user_id = $1 AND m.status = 'running'
+			WHERE mp.user_id = $1 AND m.status = 'running' AND mp.status <> 'forfeit'
 		)`, userID).Scan(&inMatch); err != nil {
 		return DeleteAccountResult{}, err
 	}
@@ -385,10 +386,6 @@ func isUniqueViolation(err error) bool {
 }
 
 func containsCode(err error, code string) bool {
-	type coder interface{ Code() string }
-	var c coder
-	if errors.As(err, &c) {
-		return c.Code() == code
-	}
-	return false
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == code
 }
