@@ -34,7 +34,7 @@ func (s *Store) ListTransactions(ctx context.Context, userID int64, f TransferFi
 	if f.Limit <= 0 || f.Limit > 100 {
 		f.Limit = 50
 	}
-	var reasons []string
+	reasons := []string{}
 	for _, r := range f.Reasons {
 		r = strings.ToUpper(strings.TrimSpace(r))
 		if r != "" {
