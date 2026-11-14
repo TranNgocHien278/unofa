@@ -202,9 +202,6 @@ func (d Deps) adminAdjustBalance(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		if err := st.InsertSnapshot(r.Context(), uid, newBalance, now); err != nil {
-			return err
-		}
 		action := "SYSTEM_ADD"
 		if body.Delta < 0 {
 			action = "SYSTEM_GET"
@@ -369,12 +366,12 @@ func (d Deps) adminAudit(w http.ResponseWriter, r *http.Request) error {
 
 func userRow(u store.User) map[string]any {
 	row := map[string]any{
-		"user_id":        u.UserID,
-		"username":       u.Username,
-		"balance":        u.Balance,
-		"locale":         derefString(u.Locale, "en"),
-		"terms_version":  u.TermsVersion,
-		"created_at":     u.CreatedAt.UTC().Format(rfc3339),
+		"user_id":       u.UserID,
+		"username":      u.Username,
+		"balance":       u.Balance,
+		"locale":        derefString(u.Locale, "en"),
+		"terms_version": u.TermsVersion,
+		"created_at":    u.CreatedAt.UTC().Format(rfc3339),
 	}
 	if u.LoginLockedUntil != nil {
 		row["login_locked_until"] = u.LoginLockedUntil.UTC().Format(rfc3339)

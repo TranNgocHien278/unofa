@@ -256,13 +256,18 @@ func (d Deps) play(w http.ResponseWriter, r *http.Request) error {
 		if err != nil {
 			return err
 		}
-		ready := 0
+		seated := make([]store.Member, 0, len(locked))
+		hostReady := false
 		for _, m := range locked {
-			if m.LobbyReady {
-				ready++
+			if !m.LobbyReady {
+				continue
 			}
+			if m.UserID == room.HostUserID {
+				hostReady = true
+			}
+			seated = append(seated, m)
 		}
-		if ready < d.Cfg.Game.MinPlayers {
+		if !hostReady || len(seated) < d.Cfg.Game.MinPlayers {
 			return errs.New(errs.NotEnoughPlayers)
 		}
 
@@ -272,23 +277,23 @@ func (d Deps) play(w http.ResponseWriter, r *http.Request) error {
 		}
 		matchID = match.MatchID
 
-		seats := make([]int, 0, len(locked))
-		userIDs := make([]int64, 0, len(locked))
-		for _, m := range locked {
-			userIDs = append(userIDs, m.UserID)
-			seats = append(seats, m.Seat)
+		seats := make([]int, 0, len(seated))
+		userIDs := make([]int64, 0, len(seated))
+		for _, m := range seated {
 			// The host's own balance is checked here; anyone short is dropped in
 			// handshake step 5, not turned into a host error (04 §play).
 			if err := ledger.Transfer(r.Context(), tx, ledger.User(m.UserID), ledger.Match(match.MatchID),
 				room.Stake, ledger.ReasonBet, "match:"+match.MatchID+":bet:"+itoa(m.UserID)); err != nil {
+				if e := errs.As(err); e == nil || e.Code != errs.InsufficientBalance {
+					return err
+				}
 				if m.UserID == room.HostUserID {
 					return errs.New(errs.InsufficientBalance)
 				}
 				continue
 			}
-			if err := st.InsertSnapshot(r.Context(), m.UserID, 0, now); err != nil {
-				return err
-			}
+			userIDs = append(userIDs, m.UserID)
+			seats = append(seats, m.Seat)
 		}
 		return st.AddMatchPlayers(r.Context(), match.MatchID, userIDs, seats)
 	})

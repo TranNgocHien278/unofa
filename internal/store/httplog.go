@@ -168,3 +168,15 @@ func (s *Store) insertLogs(ctx context.Context, entries []LogEntry) error {
 		}))
 	return err
 }
+
+// DeleteLogsBefore removes http_log rows older than before and returns how
+// many were deleted (07 §Job nền: retention cleanup).
+func (s *Store) DeleteLogsBefore(ctx context.Context, before time.Time) (int64, error) {
+	ctx, cancel := s.timeoutCtx(ctx)
+	defer cancel()
+	tag, err := s.db.Exec(ctx, `DELETE FROM http_log WHERE at < $1`, before)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}

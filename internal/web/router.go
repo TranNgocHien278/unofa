@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
 	"github.com/unofa/unofa/internal/clock"
 	"github.com/unofa/unofa/internal/config"
 	"github.com/unofa/unofa/internal/ratelimit"
@@ -27,7 +29,7 @@ func NewGameRouter(d Deps) http.Handler {
 	// --- money ---
 	mux.HandleFunc("POST /api/transfers", H(d, d.transfer))
 	mux.HandleFunc("GET /api/transactions", H(d, d.transactions))
-	mux.HandleFunc("GET /api/me/balance", H(d, d.balanceSeries))
+	mux.HandleFunc("GET /api/me/balance-chart", H(d, d.balanceSeries))
 	mux.HandleFunc("GET /api/me/matches", H(d, d.myMatches))
 
 	// --- loans ---
@@ -110,20 +112,27 @@ var startAt = time.Now().UTC()
 
 func uptimeSeconds() int64 { return int64(time.Since(startAt).Seconds()) }
 
+// handleWS upgrades the player WebSocket through the match hub.
+func (d Deps) handleWS(w http.ResponseWriter, r *http.Request) {
+	if d.Match == nil {
+		http.Error(w, `{"error":"SERVICE_UNAVAILABLE"}`, http.StatusServiceUnavailable)
+		return
+	}
+	d.Match.ServeWS(d.GameSess, d.Cfg.Server.GameOrigin)(w, r)
+}
+
 // BuildDeps wires the runtime dependencies the handlers share. cmd/unofa calls
 // it once per origin so the two routers reuse the same store and Redis handle.
-func BuildDeps(cfg *config.Config, st *store.Store, rdb interface{}, clk clock.Clock, match MatchService) Deps {
-	// rdb is typed loosely to keep web from importing go-redis at the boundary;
-	// the session manager and limiter take the concrete *redis.Client.
-	d := Deps{
-		Cfg:    cfg,
-		Store:  st,
-		Clock:  clk,
-		Match:  match,
-		Now:    func() time.Time { return clk.Now().UTC() },
-		GameSess:  session.NewGame(nil, cfg.Redis.SessionTTL),
-		AdminSess: session.NewAdmin(nil, cfg.Redis.SessionTTL),
-		Limiter:   ratelimit.New(nil),
+func BuildDeps(cfg *config.Config, st *store.Store, rdb *redis.Client, clk clock.Clock, match MatchService) Deps {
+	return Deps{
+		Cfg:       cfg,
+		Store:     st,
+		RDB:       rdb,
+		Clock:     clk,
+		Match:     match,
+		Now:       func() time.Time { return clk.Now().UTC() },
+		GameSess:  session.NewGame(rdb, cfg.Redis.SessionTTL),
+		AdminSess: session.NewAdmin(rdb, cfg.Redis.SessionTTL),
+		Limiter:   ratelimit.New(rdb),
 	}
-	return d
 }

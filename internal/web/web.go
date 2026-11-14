@@ -18,7 +18,6 @@ import (
 	"github.com/unofa/unofa/internal/clock"
 	"github.com/unofa/unofa/internal/config"
 	"github.com/unofa/unofa/internal/errs"
-	"github.com/unofa/unofa/internal/ledger"
 	"github.com/unofa/unofa/internal/loan"
 	"github.com/unofa/unofa/internal/middleware"
 	"github.com/unofa/unofa/internal/ratelimit"
@@ -26,12 +25,12 @@ import (
 	"github.com/unofa/unofa/internal/store"
 )
 
-var _ = context.Background
-
 // MatchService is the narrow seam between HTTP and the live match machinery.
 // internal/web declares it; the match hub satisfies it. Keeping the interface here
 // is what stops web from importing match.
 type MatchService interface {
+	// ServeWS upgrades a request to the player WebSocket bound to the game session.
+	ServeWS(gameSess *session.Manager, allowedOrigin string) http.HandlerFunc
 	// StartMatch is called after POST /api/rooms/{code}/play has locked the room and
 	// created the matches row. It must return once the match goroutine is registered.
 	StartMatch(ctx context.Context, matchID, roomID string) error
@@ -47,15 +46,15 @@ type MatchService interface {
 
 // Deps is everything the handlers need.
 type Deps struct {
-	Cfg     *config.Config
-	Store   *store.Store
-	RDB     *redis.Client
-	Clock   clock.Clock
-	Match   MatchService
-	GameSess *session.Manager
+	Cfg       *config.Config
+	Store     *store.Store
+	RDB       *redis.Client
+	Clock     clock.Clock
+	Match     MatchService
+	GameSess  *session.Manager
 	AdminSess *session.Manager
-	Limiter  *ratelimit.Limiter
-	Now      func() time.Time
+	Limiter   *ratelimit.Limiter
+	Now       func() time.Time
 }
 
 // handler is a method that can fail with a coded error.
@@ -162,6 +161,3 @@ func (d Deps) loanCfg() loan.LoanCfg {
 		CapMultiplier: d.Cfg.Loan.CapMultiplier,
 	}
 }
-
-// acctUser is a tiny convenience over ledger.User.
-func acctUser(id int64) ledger.Acct { return ledger.User(id) }

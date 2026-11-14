@@ -4,6 +4,7 @@
 package middleware
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -114,7 +115,7 @@ func WriteJSON(w http.ResponseWriter, status int, now time.Time, v any) {
 // LogEntry is one structured line written to the async http_log writer.
 type LogEntry struct {
 	RequestID  string    `json:"request_id"`
-	Endpoint   string    `json:"endpoint"`    // route pattern, not the actual URL
+	Endpoint   string    `json:"endpoint"` // route pattern, not the actual URL
 	StatusCode int       `json:"status_code"`
 	IP         string    `json:"ip,omitempty"`
 	UserID     *int64    `json:"user_id,omitempty"`
@@ -226,3 +227,20 @@ func (rw *statusWriter) WriteHeader(code int) {
 	}
 	rw.ResponseWriter.WriteHeader(code)
 }
+
+// Hijack lets gorilla/websocket's Upgrader take over the connection; without
+// it the upgrade fails with 500. A hijacked response never goes through
+// WriteHeader, so record 101 here for http_log.
+func (rw *statusWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	h, ok := rw.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, fmt.Errorf("middleware: underlying ResponseWriter does not implement http.Hijacker")
+	}
+	if !rw.written {
+		rw.code = http.StatusSwitchingProtocols
+		rw.written = true
+	}
+	return h.Hijack()
+}
+
+var _ http.Hijacker = (*statusWriter)(nil)

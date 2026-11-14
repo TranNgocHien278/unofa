@@ -38,9 +38,9 @@ func (d Deps) register(w http.ResponseWriter, r *http.Request) error {
 	}
 
 	var body struct {
-		Username     string `json:"username"`
-		Password     string `json:"password"`
-		TermsAccepted bool  `json:"terms_accepted"`
+		Username      string `json:"username"`
+		Password      string `json:"password"`
+		TermsAccepted bool   `json:"terms_accepted"`
 	}
 	if err := decodeJSON(w, r, &body); err != nil {
 		return err
@@ -75,9 +75,6 @@ func (d Deps) register(w http.ResponseWriter, r *http.Request) error {
 		if err := ledger.Transfer(r.Context(), tx, ledger.System, ledger.User(created.UserID),
 			d.Cfg.Money.SignupBonus, ledger.ReasonSignupBonus,
 			"signup:"+itoa(created.UserID)); err != nil {
-			return err
-		}
-		if err := d.Store.InTx(tx).InsertSnapshot(r.Context(), created.UserID, d.Cfg.Money.SignupBonus, now); err != nil {
 			return err
 		}
 		user = created

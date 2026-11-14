@@ -32,7 +32,7 @@ func (d Deps) transfer(w http.ResponseWriter, r *http.Request) error {
 		return err
 	}
 	if body.ClientUUID == "" {
-		return errs.New(errs.Internal)
+		return errs.New(errs.InvalidRequest)
 	}
 	if body.Amount < d.Cfg.Money.TransferMin {
 		return errs.New(errs.InsufficientBalance)
@@ -52,21 +52,11 @@ func (d Deps) transfer(w http.ResponseWriter, r *http.Request) error {
 			body.Amount, ledger.ReasonTransfer, "transfer:"+body.ClientUUID); err != nil {
 			return err
 		}
-		st := d.Store.InTx(tx)
-		if err := st.InsertSnapshot(r.Context(), uid, 0, now); err != nil {
-			return err
-		}
-		balanceAfter, err = st.BalanceOf(r.Context(), uid)
+		balanceAfter, err = d.Store.InTx(tx).BalanceOf(r.Context(), uid)
 		return err
 	})
 	if txErr != nil {
 		return txErr
-	}
-	// The snapshot row above carried 0; replace it with the real balance now that
-	// the transfer committed. A single extra write is cheaper than threading the
-	// post-update balance out of the ledger.
-	if err := d.Store.InsertSnapshot(r.Context(), uid, balanceAfter, now); err != nil {
-		return err
 	}
 
 	writeJSON(w, http.StatusCreated, now, map[string]any{
@@ -115,7 +105,7 @@ func (d Deps) transactions(w http.ResponseWriter, r *http.Request) error {
 	return nil
 }
 
-// balanceSeries handles GET /api/me/balance (chart data, 06 §Chart).
+// balanceSeries handles GET /api/me/balance-chart (chart data, 06 §Chart).
 func (d Deps) balanceSeries(w http.ResponseWriter, r *http.Request) error {
 	uid, err := d.userID(r)
 	if err != nil {
@@ -226,12 +216,8 @@ func (d Deps) borrow(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		taken = l
-		st := d.Store.InTx(tx)
-		balanceAfter, err = st.BalanceOf(r.Context(), uid)
+		balanceAfter, err = d.Store.InTx(tx).BalanceOf(r.Context(), uid)
 		if err != nil {
-			return err
-		}
-		if err := st.InsertSnapshot(r.Context(), uid, balanceAfter, now); err != nil {
 			return err
 		}
 		owedNow, _ = ledger.Owed(l.Principal, l.RateBps, l.DueAt, now, cfg.OverdueBps, cfg.CapMultiplier)
@@ -267,13 +253,13 @@ func (d Deps) activeLoan(w http.ResponseWriter, r *http.Request) error {
 		return nil
 	}
 	writeJSON(w, http.StatusOK, d.now(), map[string]any{
-		"loan_id":          al.LoanID,
-		"principal":        al.Principal,
-		"due_at":           al.DueAt.UTC().Format(rfc3339),
-		"owed_now":         al.OwendNow,
-		"overdue":          al.Overdue,
-		"periods_overdue":  al.PeriodsOverdue,
-		"seize_at":         al.SeizeAt.UTC().Format(rfc3339),
+		"loan_id":         al.LoanID,
+		"principal":       al.Principal,
+		"due_at":          al.DueAt.UTC().Format(rfc3339),
+		"owed_now":        al.OwendNow,
+		"overdue":         al.Overdue,
+		"periods_overdue": al.PeriodsOverdue,
+		"seize_at":        al.SeizeAt.UTC().Format(rfc3339),
 	})
 	return nil
 }
@@ -296,12 +282,8 @@ func (d Deps) repay(w http.ResponseWriter, r *http.Request) error {
 			return err
 		}
 		paid = p
-		st := d.Store.InTx(tx)
-		balanceAfter, err = st.BalanceOf(r.Context(), uid)
-		if err != nil {
-			return err
-		}
-		return st.InsertSnapshot(r.Context(), uid, balanceAfter, now)
+		balanceAfter, err = d.Store.InTx(tx).BalanceOf(r.Context(), uid)
+		return err
 	})
 	if txErr != nil {
 		return txErr

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"slices"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -62,6 +63,9 @@ type LoanTerm struct {
 	Duration time.Duration `yaml:"duration"`
 	RateBps  int           `yaml:"rate_bps"`
 }
+
+// knownLoanTerms mirrors the loan.term CHECK in migrations/0001_init.sql, the source of truth.
+var knownLoanTerms = []string{"24h", "3d", "30d"}
 
 type Loan struct {
 	Packages      []int64    `yaml:"packages"`
@@ -176,6 +180,11 @@ func (c *Config) Validate() error {
 		case 500, 1000, 2000:
 		default:
 			return fmt.Errorf("loan.packages %d is outside {500,1000,2000}", p)
+		}
+	}
+	for _, t := range c.Loan.Terms {
+		if !slices.Contains(knownLoanTerms, t.Name) {
+			return fmt.Errorf("loan.terms %q is outside {24h,3d,30d}", t.Name)
 		}
 	}
 	return nil
