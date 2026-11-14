@@ -76,6 +76,18 @@ func (m *matchStub) CloseSession(_, reason string) {
 	m.closes = append(m.closes, reason)
 }
 
+func (m *matchStub) CloseUser(_ int64, reason string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.closes = append(m.closes, reason)
+}
+
+func (m *matchStub) closeReasons() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]string(nil), m.closes...)
+}
+
 func (m *matchStub) startCalls() []startCall {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -298,6 +310,8 @@ func (e *env) login(name string) string {
 	}
 	return r.cookie(session.GameCookieName)
 }
+
+var _ = (*env).login
 
 func (e *env) adminCookie() string {
 	e.t.Helper()

@@ -262,11 +262,14 @@ func (d Deps) adminDeleteAccount(w http.ResponseWriter, r *http.Request) error {
 	if txErr != nil {
 		return txErr
 	}
-	if result.SessionKey != "" {
+	if result.SessionKey != "" && d.GameSess != nil {
 		d.GameSess.DeleteByToken(r.Context(), result.SessionKey)
 	}
-	if result.WSUserID != 0 && d.Match != nil {
-		_ = d.Match.Forfeit(r.Context(), "", result.WSUserID)
+	if d.GameSess != nil {
+		_ = d.GameSess.DeleteAllForUser(r.Context(), uid)
+	}
+	if d.Match != nil {
+		d.Match.CloseUser(uid, "ACCOUNT_DELETED")
 	}
 	w.WriteHeader(http.StatusNoContent)
 	return nil

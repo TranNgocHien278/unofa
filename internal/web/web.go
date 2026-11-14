@@ -42,6 +42,8 @@ type MatchService interface {
 	State(matchID string, userID int64) (any, bool)
 	// CloseSession closes the WebSocket bound to a session (logout, password change).
 	CloseSession(sessionToken, reason string)
+	// CloseUser closes all WebSockets for a given userID (account delete).
+	CloseUser(userID int64, reason string)
 }
 
 // Deps is everything the handlers need.

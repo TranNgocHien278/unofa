@@ -94,6 +94,9 @@ func TestAdminDeleteAccount(t *testing.T) {
 	if n := e.scalar(`SELECT count(*) FROM users WHERE user_id = $1 AND deleted_at IS NOT NULL`, uid); n != 1 {
 		t.Errorf("user not soft-deleted: %d", n)
 	}
+	if reasons := e.stub.closeReasons(); len(reasons) != 1 || reasons[0] != "ACCOUNT_DELETED" {
+		t.Errorf("closes = %v, want [ACCOUNT_DELETED]", reasons)
+	}
 }
 
 // TestAdminFlags_ListAndClear covers GET /api/admin/flags and clearing one.

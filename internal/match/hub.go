@@ -167,9 +167,10 @@ func (h *Hub) Forfeit(_ context.Context, matchID string, userID int64) error {
 	}
 	select {
 	case run.ch <- forfeitMsg{userID: userID, now: h.clk.Now()}:
-	default:
+		return nil
+	case <-time.After(time.Second):
+		return errs.New(errs.ServiceUnavailable)
 	}
-	return nil
 }
 
 // State returns the per-viewer snapshot for GET /api/matches/{id}/state.
@@ -209,6 +210,21 @@ func (h *Hub) CloseSession(token, reason string) {
 	conn, ok := h.socks[token]
 	h.mu.Unlock()
 	if ok {
+		conn.shut(1000, reason)
+	}
+}
+
+// CloseUser closes all WebSockets for a given userID.
+func (h *Hub) CloseUser(userID int64, reason string) {
+	h.mu.Lock()
+	var toClose []*wsConn
+	for _, conn := range h.socks {
+		if conn.userID == userID {
+			toClose = append(toClose, conn)
+		}
+	}
+	h.mu.Unlock()
+	for _, conn := range toClose {
 		conn.shut(1000, reason)
 	}
 }
@@ -354,6 +370,7 @@ func (h *Hub) handshake(run *matchRun) bool {
 	timeout := time.NewTimer(h.cfg.Game.ReadyTimeout)
 	defer timeout.Stop()
 
+	var deferred []any
 	for len(pending) > 0 {
 		select {
 		case <-timeout.C:
@@ -364,6 +381,8 @@ func (h *Hub) handshake(run *matchRun) bool {
 				delete(pending, m.userID)
 			case snapshotReq:
 				m.resp <- nil
+			default:
+				deferred = append(deferred, msg)
 			}
 		}
 	}
@@ -384,6 +403,12 @@ func (h *Hub) handshake(run *matchRun) bool {
 	for _, in := range run.inits {
 		h.sendPrivate(run, in.UserID, game.Event{Name: "match_start", Seq: st.Seq()},
 			st.MatchStartView(in.UserID, now))
+	}
+	for _, d := range deferred {
+		select {
+		case run.ch <- d:
+		default:
+		}
 	}
 	return true
 }
