@@ -329,6 +329,7 @@ Danh sách đóng (D9). Thêm mã mới là sửa file này trước, rồi FE.
 | `TRANSFER_LIMIT` | 400 | Vượt `1000U/24h`. |
 | `SELF_TRANSFER` | 400 | Chuyển cho chính mình. |
 | `USER_NOT_FOUND` | 404 | Username không tồn tại. |
+| `INVALID_REQUEST` | 400 | Body thiếu trường bắt buộc (vd `client_uuid`). |
 | `LOAN_OVERDUE` | 403 | Có khoản vay quá hạn. |
 | `LOAN_ACTIVE_EXISTS` | 409 | Đã có khoản active. |
 | `LOAN_NOT_FOUND` | 404 | Không có khoản vay. |
