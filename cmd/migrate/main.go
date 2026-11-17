@@ -47,6 +47,8 @@ func run(ctx context.Context, conn *pgx.Conn, dir string) error {
 		version TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())`); err != nil {
 		return err
 	}
+
+	// Get list of *.sql files were embedded. Then filter to prevent wrong file types and sort correctly.
 	entries, err := migrations.FS.ReadDir(dir)
 	if err != nil {
 		return err
@@ -60,6 +62,7 @@ func run(ctx context.Context, conn *pgx.Conn, dir string) error {
 	sort.Strings(names)
 
 	for _, name := range names {
+		// Check if the migration has already been applied
 		var exists bool
 		if err := conn.QueryRow(ctx,
 			`SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE version = $1)`, name).Scan(&exists); err != nil {
@@ -68,10 +71,14 @@ func run(ctx context.Context, conn *pgx.Conn, dir string) error {
 		if exists {
 			continue
 		}
+
+		// Read the migration file following abs path
 		body, err := migrations.FS.ReadFile(path.Join(dir, name))
 		if err != nil {
 			return err
 		}
+
+		// Start transaction to exec migrate
 		tx, err := conn.Begin(ctx)
 		if err != nil {
 			return err
@@ -80,10 +87,14 @@ func run(ctx context.Context, conn *pgx.Conn, dir string) error {
 			_ = tx.Rollback(ctx)
 			return fmt.Errorf("%s: %w", name, err)
 		}
+
+		// Record the applied migration in schema_migrations
 		if _, err := tx.Exec(ctx, `INSERT INTO schema_migrations (version) VALUES ($1)`, name); err != nil {
 			_ = tx.Rollback(ctx)
 			return err
 		}
+
+		// Commit the transaction
 		if err := tx.Commit(ctx); err != nil {
 			return err
 		}

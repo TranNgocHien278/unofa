@@ -60,43 +60,56 @@ func main() {
 func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 	clk := clock.Real{}
 
+	// Setup Postgres store
 	// store.New pings Postgres before returning.
 	st, err := store.New(ctx, cfg.DB.DSN, cfg.DB.MaxConns, cfg.DB.MinConns, cfg.DB.ConnTimeout)
 	if err != nil {
 		return fmt.Errorf("connect postgres: %w", err)
 	}
 	defer st.Close()
-	logger.Info("step 2: postgres connected")
+	logger.Info("postgres connected")
 
+	// Setup Redis client
 	rdb := redis.NewClient(&redis.Options{Addr: cfg.Redis.Addr, DB: cfg.Redis.DB})
 	defer rdb.Close()
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		return fmt.Errorf("connect redis: %w", err)
 	}
-	logger.Info("step 3: redis connected")
+	logger.Info("redis connected")
 
+	// Chore aborted matches, wipe rooms, and record SERVER_RESTARTED
 	aborted, rooms, err := startupTx(ctx, st, clk.Now())
 	if err != nil {
 		return fmt.Errorf("startup transaction: %w", err)
 	}
-	logger.Info("step 4: startup transaction committed",
+	logger.Info("startup transaction committed",
 		slog.Int64("aborted_matches", aborted),
 		slog.Int64("rooms_deleted", rooms),
 	)
 
+	// Setup match hub and build deps
 	hub := match.New(cfg, st.Pool, st, clk, logger)
 	deps := web.BuildDeps(cfg, st, rdb, clk, hub)
+
+	// Set rate limiter on match hub
 	hub.SetLimiter(deps.Limiter)
 
+	// Create background jobs
 	runner := jobs.New(cfg, st, clk, logger)
+	// Create new ctx for jobs that depends on the main ctx
+	// When main ctx is canceled, jobs will be canceled too. But when jobs are canceled, main ctx will not be canceled.
 	jobCtx, stopJobs := context.WithCancel(ctx)
 	defer runner.Wait()
 	defer stopJobs()
+	// Start background jobs in a separate goroutine
 	runner.Start(jobCtx)
-	logger.Info("step 5: background jobs started")
+	logger.Info("background jobs started")
 
+	// Create new thread for http mw log
 	writer := st.NewAsyncWriter()
 	logMW := middleware.LoggingMiddleware(httpLogAdapter{writer}, logger, []string{"/healthz"})
+
+	// Setup HTTP servers for game and admin endpoints. Each has its own router and middleware
 	gameSrv := &http.Server{
 		Addr:              cfg.Server.GameAddr,
 		Handler:           middleware.RequestIDMiddleware(logMW(web.NewGameRouter(deps))),
@@ -108,6 +121,8 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
+	// Run both listeners in separate goroutines
+	// If either fails, cancel the main ctx and shut down both listeners
 	errCh := make(chan error, 2)
 	for _, srv := range []*http.Server{gameSrv, adminSrv} {
 		go func(srv *http.Server) {
@@ -116,19 +131,22 @@ func run(ctx context.Context, cfg *config.Config, logger *slog.Logger) error {
 			}
 		}(srv)
 	}
-	logger.Info("step 6: listeners open",
+	logger.Info("listeners open",
 		slog.String("game_addr", cfg.Server.GameAddr),
 		slog.String("admin_addr", cfg.Server.AdminAddr),
 	)
 
+	// Wait for either the main context to be done or an error to occur
 	var runErr error
 	select {
 	case <-ctx.Done():
 	case runErr = <-errCh:
 	}
 
+	// Shutdown sequence: cancel jobs, shutdown listeners, flush and close log writer
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer shutdownCancel()
+
 	for _, srv := range []*http.Server{gameSrv, adminSrv} {
 		if err := srv.Shutdown(shutdownCtx); err != nil {
 			logger.Error("listener shutdown failed", slog.String("err", err.Error()))

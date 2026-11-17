@@ -134,10 +134,13 @@ func Load(path string) (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	var c Config
 	if err := yaml.Unmarshal([]byte(ExpandEnv(string(raw))), &c); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)
 	}
+
+	// Apply defaults before validation, so that missing optional fields are filled in.
 	c.applyDefaults()
 	if err := c.Validate(); err != nil {
 		return nil, err
