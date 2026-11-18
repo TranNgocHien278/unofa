@@ -1,0 +1,83 @@
+{
+  "admin": {
+    "title": "UNOFA admin",
+    "nav": {
+      "main": "Admin",
+      "dashboard": "Dashboard",
+      "metrics": "Metrics",
+      "accounts": "Accounts",
+      "audit": "Audit log",
+      "logout": "Sign out"
+    },
+    "login": {
+      "title": "Admin sign in",
+      "cta": "Sign in"
+    },
+    "dash": {
+      "today": "Today so far",
+      "requests": "Requests",
+      "clientErrors": "4xx responses",
+      "serverErrors": "5xx responses",
+      "flagsTitle": "Open flags",
+      "noFlags": "No open flags",
+      "clear": "Clear",
+      "clearTitle": "Clear this flag?",
+      "clearBody": "Clearing is logged. The underlying problem is not fixed by it.",
+      "cleared": "Flag cleared",
+      "kind": {
+        "MONEY_INVARIANT": "Money invariant broken",
+        "LOGIN_LOCKED": "Login locked",
+        "REDIS_DOWN": "Redis was down",
+        "LOAN_SEIZED": "Loan seized",
+        "SERVER_RESTARTED": "Server restarted"
+      }
+    },
+    "metrics": {
+      "title": "Metrics",
+      "requests": "Requests by endpoint",
+      "codesShare": "Status code share",
+      "codesCount": "Status codes",
+      "other": "Other",
+      "endpoint": "Endpoint",
+      "count": "Requests",
+      "code": "Class",
+      "shareNeedsTwo": "Share needs traffic in two or more time buckets. Counts are in Status codes below."
+    },
+    "accounts": {
+      "title": "Accounts",
+      "search": "Search username",
+      "empty": "No accounts match",
+      "locked": "Locked",
+      "deleted": "Deleted",
+      "joined": "Joined {{date}}"
+    },
+    "detail": {
+      "back": "All accounts",
+      "loan": "Active loan",
+      "noLoan": "No active loan",
+      "owed": "Owes {{owed}}, due {{date}}",
+      "overdue": "Overdue",
+      "adjust": "Adjust balance",
+      "add": "Add",
+      "remove": "Remove",
+      "amount": "Amount",
+      "adjustAdd": "Add {{amount}}",
+      "adjustRemove": "Remove {{amount}}",
+      "confirmAdd": "Add {{amount}} to {{name}}?",
+      "confirmRemove": "Remove {{amount}} from {{name}}?",
+      "auditNote": "This goes to the audit log under your name.",
+      "adjusted": "Balance is now {{amount}}",
+      "tx": "Last 50 transactions",
+      "delete": "Delete account",
+      "deleteTitle": "Delete {{name}}?",
+      "deleteBody": "An active loan is seized, the balance goes to System, the username becomes deleted_{{id}} and every session ends. This cannot be undone. Type the username to confirm.",
+      "deleteCta": "Delete for good",
+      "deletedToast": "Account deleted"
+    },
+    "audit": {
+      "title": "Audit log",
+      "empty": "Nothing logged yet",
+      "target": "user #{{id}}"
+    }
+  }
+}

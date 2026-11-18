@@ -1,0 +1,56 @@
+:root {
+  /* Card colours are fixed by docs/spec/06-frontend.md §Component lá bài. */
+  --card-red: #d7263d;
+  --card-yellow: #f2b500;
+  --card-green: #2a9d4a;
+  --card-blue: #1b6ca8;
+  --card-ink: #101010;
+  --card-paper: #fafafa;
+
+  /* Table floor tints, one per active colour. */
+  --floor-red: oklch(0.91 0.045 15);
+  --floor-yellow: oklch(0.95 0.08 92);
+  --floor-green: oklch(0.92 0.05 150);
+  --floor-blue: oklch(0.91 0.04 245);
+  --floor-none: oklch(0.94 0.01 90);
+
+  --ink: var(--card-ink);
+  --ink-2: oklch(0.4 0.012 80);
+  --paper: var(--card-paper);
+  --paper-2: oklch(0.955 0.014 90);
+  --sun: oklch(0.85 0.155 86);
+  --sun-2: oklch(0.8 0.15 82);
+  --sun-ink: oklch(0.36 0.07 70);
+  --alert: oklch(0.52 0.19 22);
+  --alert-floor: oklch(0.93 0.04 20);
+  --good: oklch(0.47 0.12 150);
+  --focus: var(--ink);
+
+  --stroke: 3px;
+  --r-card: 10px;
+  --r-ctl: 14px;
+  --r-panel: 24px;
+
+  --shadow-ground: oklch(0.25 0.04 80 / 0.4);
+  --shadow-lift: 0 14px 24px -14px oklch(0.25 0.04 80 / 0.55);
+
+  --font-display: 'Coiny', 'Be Vietnam Pro', system-ui, sans-serif;
+  --font-body: 'Be Vietnam Pro', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --gutter: 16px;
+
+  --z-nav: 10;
+  --z-overlay: 40;
+  --z-dialog: 50;
+  --z-toast: 60;
+
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
+}
+
+@media (min-width: 720px) {
+  :root {
+    --gutter: 24px;
+  }
+}

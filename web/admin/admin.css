@@ -1,0 +1,121 @@
+/* Admin is a work tool: same ink and paper, calmer ground, denser lists. */
+body {
+  background: var(--paper-2);
+}
+.admin-shell {
+  min-height: 100dvh;
+}
+.admin-bar {
+  position: sticky;
+  top: 0;
+  z-index: var(--z-nav);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  padding: 10px var(--gutter);
+  background: var(--sun);
+  border-bottom: var(--stroke) solid var(--ink);
+}
+.admin-bar nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-right: auto;
+}
+.admin-bar nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: 12px;
+  font-weight: 700;
+  color: var(--ink);
+  text-decoration: none;
+}
+.admin-bar nav a[aria-current='page'] {
+  background: var(--ink);
+  color: var(--paper);
+}
+.admin-login {
+  max-width: 420px;
+  padding-top: 12vh;
+}
+.admin-page {
+  display: grid;
+  gap: 16px;
+  padding-top: 12px;
+}
+.admin-page > .cel + .cel {
+  margin-top: 0;
+}
+.admin-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+}
+.admin-head h1 {
+  margin: 0;
+}
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 8px;
+}
+.tile {
+  display: grid;
+  gap: 4px;
+}
+.tile__n {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 34px;
+  line-height: 1.1;
+}
+.mono {
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 13px;
+}
+.search {
+  position: relative;
+}
+.search svg {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  pointer-events: none;
+}
+.search .input {
+  padding-left: 46px;
+}
+.row-link {
+  font-weight: 700;
+  color: var(--ink);
+}
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  font-weight: 700;
+  color: var(--ink);
+}
+.detail-grid {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+}
+.detail-grid .cel + .cel {
+  margin-top: 0;
+}
+@media (min-width: 960px) {
+  .detail-grid {
+    grid-template-columns: minmax(300px, 1fr) minmax(0, 1.4fr);
+  }
+}
+.tiles > .cel + .cel {
+  margin-top: 0;
+}

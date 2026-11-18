@@ -1,0 +1,83 @@
+{
+  "admin": {
+    "title": "UNOFA admin",
+    "nav": {
+      "main": "Admin",
+      "dashboard": "Tổng quan",
+      "metrics": "Số liệu",
+      "accounts": "Tài khoản",
+      "audit": "Nhật ký",
+      "logout": "Đăng xuất"
+    },
+    "login": {
+      "title": "Đăng nhập admin",
+      "cta": "Đăng nhập"
+    },
+    "dash": {
+      "today": "Hôm nay",
+      "requests": "Request",
+      "clientErrors": "Phản hồi 4xx",
+      "serverErrors": "Phản hồi 5xx",
+      "flagsTitle": "Cờ đang mở",
+      "noFlags": "Không có cờ nào",
+      "clear": "Xoá cờ",
+      "clearTitle": "Xoá cờ này?",
+      "clearBody": "Xoá cờ được ghi nhật ký. Việc xoá không sửa lỗi gốc.",
+      "cleared": "Đã xoá cờ",
+      "kind": {
+        "MONEY_INVARIANT": "Lệch tổng tiền",
+        "LOGIN_LOCKED": "Khoá đăng nhập",
+        "REDIS_DOWN": "Redis từng chết",
+        "LOAN_SEIZED": "Siết nợ",
+        "SERVER_RESTARTED": "Server khởi động lại"
+      }
+    },
+    "metrics": {
+      "title": "Số liệu",
+      "requests": "Request theo endpoint",
+      "codesShare": "Tỉ lệ mã trạng thái",
+      "codesCount": "Số lượng theo mã trạng thái",
+      "other": "Khác",
+      "endpoint": "Endpoint",
+      "count": "Request",
+      "code": "Nhóm mã",
+      "shareNeedsTwo": "Cần lưu lượng ở ít nhất hai mốc thời gian để tính tỉ lệ. Số liệu đếm nằm ở mục Mã trạng thái bên dưới."
+    },
+    "accounts": {
+      "title": "Tài khoản",
+      "search": "Tìm theo tên",
+      "empty": "Không có tài khoản khớp",
+      "locked": "Bị khoá",
+      "deleted": "Đã xoá",
+      "joined": "Tham gia {{date}}"
+    },
+    "detail": {
+      "back": "Mọi tài khoản",
+      "loan": "Khoản vay",
+      "noLoan": "Không có khoản vay",
+      "owed": "Nợ {{owed}}, hạn {{date}}",
+      "overdue": "Quá hạn",
+      "adjust": "Chỉnh số dư",
+      "add": "Cộng",
+      "remove": "Trừ",
+      "amount": "Số U",
+      "adjustAdd": "Cộng {{amount}}",
+      "adjustRemove": "Trừ {{amount}}",
+      "confirmAdd": "Cộng {{amount}} cho {{name}}?",
+      "confirmRemove": "Trừ {{amount}} của {{name}}?",
+      "auditNote": "Thao tác này ghi vào nhật ký kèm tên admin.",
+      "adjusted": "Số dư mới: {{amount}}",
+      "tx": "50 giao dịch gần nhất",
+      "delete": "Xoá tài khoản",
+      "deleteTitle": "Xoá {{name}}?",
+      "deleteBody": "Khoản vay đang mở bị siết, số dư chuyển về System, tên đổi thành deleted_{{id}} và mọi phiên bị đóng. Không hoàn tác được. Gõ lại tên đăng nhập để xác nhận.",
+      "deleteCta": "Xoá vĩnh viễn",
+      "deletedToast": "Đã xoá tài khoản"
+    },
+    "audit": {
+      "title": "Nhật ký admin",
+      "empty": "Chưa có gì",
+      "target": "user #{{id}}"
+    }
+  }
+}
