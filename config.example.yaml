@@ -4,8 +4,8 @@
 server:
   game_addr: ":8080"
   admin_addr: ":8081"
-  game_origin: "https://uno.example.com"
-  admin_origin: "https://admin.example.com"
+  game_origin: "https://uno.tnhien.tech"
+  admin_origin: "https://admin.tnhien.tech"
   trusted_proxies: ["172.16.0.0/12"]
 
 db:

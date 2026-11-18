@@ -1,11 +1,13 @@
 # Agent components
 .claude-flow
+.impeccable
+.playwright-mcp
 
 # Env
 .env
 config.yaml
-node_modules/
-dist/
+**/node_modules/
+**/dist/
 /unofa
 *.out
 
