@@ -101,8 +101,9 @@ func WriteJSON(w http.ResponseWriter, status int, now time.Time, v any) {
 	if err != nil {
 		return
 	}
+	// A JSON null (e.g. no active loan) unmarshals to a nil map: write it as-is.
 	var m map[string]any
-	if json.Unmarshal(raw, &m) == nil {
+	if json.Unmarshal(raw, &m) == nil && m != nil {
 		m["server_now"] = now.UTC().Format(time.RFC3339)
 		if out, err := json.Marshal(m); err == nil {
 			_, _ = w.Write(out)
@@ -143,19 +144,6 @@ func WithUserID(ctx context.Context, uid int64) context.Context {
 	return context.WithValue(ctx, userIDKey{}, uid)
 }
 
-// RoutePatternKey is used by the router to stash the matched route pattern so the
-// log middleware records /api/matches/{id}/state instead of the real URL.
-type routePatternKey struct{}
-
-func WithRoutePattern(ctx context.Context, pattern string) context.Context {
-	return context.WithValue(ctx, routePatternKey{}, pattern)
-}
-
-func RoutePattern(ctx context.Context) string {
-	v, _ := ctx.Value(routePatternKey{}).(string)
-	return v
-}
-
 // LoggingMiddleware records one async LogEntry per request (04 §rate limit,
 // 07 §Admin §Metric). Skips /healthz (07 §/healthz) and static assets.
 func LoggingMiddleware(lw LogWriter, logger *slog.Logger, skipPrefixes []string) func(http.Handler) http.Handler {
@@ -174,7 +162,9 @@ func LoggingMiddleware(lw LogWriter, logger *slog.Logger, skipPrefixes []string)
 			dur := time.Since(start)
 
 			rid := RequestID(r.Context())
-			pattern := RoutePattern(r.Context())
+			// ServeMux sets r.Pattern on this same request, so the log records
+			// "GET /api/matches/{id}/state" instead of every real match id.
+			pattern := r.Pattern
 			if pattern == "" {
 				pattern = r.URL.Path
 			}
