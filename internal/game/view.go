@@ -22,6 +22,8 @@ type YouView struct {
 	CanCallUno bool       `json:"can_call_uno"`
 	CanCatchUno *int64    `json:"can_catch_uno"`
 	IsYourTurn bool       `json:"is_your_turn"`
+	// DrewThisTurn tells the client to offer Pass instead of Draw (02 §draw).
+	DrewThisTurn bool `json:"drew_this_turn"`
 }
 
 // PublicView is everything every player may see.
@@ -58,6 +60,7 @@ func (s *State) View(userID int64, now time.Time) View {
 		you.Hand = ToWireAll(p.Hand)
 		you.CanCallUno = s.canCallUno(userID)
 		you.IsYourTurn = s.phase == Playing && s.current == idx
+		you.DrewThisTurn = you.IsYourTurn && s.drawnThisTurn != nil
 	}
 	you.CanCatchUno = s.canCatchUno(userID)
 

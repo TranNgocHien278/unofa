@@ -141,6 +141,16 @@ func (s *Store) SetStatus(ctx context.Context, roomID, status string) error {
 	return s.execRoom(ctx, `UPDATE rooms SET status = $2 WHERE room_id = $1`, roomID, status)
 }
 
+// ReopenRoom returns a room to the lobby after its match settles: status back to
+// 'open' and every lobby_ready flag cleared (01 §Chơi một ván).
+func (s *Store) ReopenRoom(ctx context.Context, roomID string) error {
+	ctx, cancel := s.timeoutCtx(ctx)
+	defer cancel()
+	_, err := s.db.Exec(ctx, `WITH r AS (UPDATE rooms SET status = 'open' WHERE room_id = $1 RETURNING room_id)
+		UPDATE room_members SET lobby_ready = false WHERE room_id IN (SELECT room_id FROM r)`, roomID)
+	return err
+}
+
 func (s *Store) SetHost(ctx context.Context, roomID string, hostUserID int64) error {
 	return s.execRoom(ctx, `UPDATE rooms SET host_user_id = $2 WHERE room_id = $1`, roomID, hostUserID)
 }

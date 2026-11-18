@@ -492,7 +492,10 @@ func (h *Hub) settleMatch(run *matchRun) {
 				slog.String("match_id", run.matchID), slog.Any("err", err))
 		}
 	}
-	_ = h.st.SetStatus(ctx, run.roomID, "in_match")
+	if err := h.st.ReopenRoom(ctx, run.roomID); err != nil {
+		h.log.Error("reopen room failed",
+			slog.String("room_id", run.roomID), slog.Any("err", err))
+	}
 }
 
 // --- fan-out ---
@@ -530,6 +533,21 @@ func (h *Hub) broadcast(run *matchRun, evts []game.Event) {
 			h.sendPrivate(run, uid, e, payload)
 		}
 		h.broadcastPublic(run, e)
+	}
+	h.pushViews(run, len(evts))
+}
+
+// pushViews sends each player their own snapshot after a batch of events, so the
+// client never re-derives turn order, deadline or hand counts from deltas. The
+// frame carries no top-level seq; data.seq is the last applied event. Skipped
+// once the match ended: match_end stays the final frame.
+func (h *Hub) pushViews(run *matchRun, n int) {
+	if n == 0 || run.state == nil || run.state.Phase() == game.Ended {
+		return
+	}
+	now := h.clk.Now()
+	for _, in := range run.inits {
+		h.sendPrivate(run, in.UserID, game.Event{Name: "state"}, run.state.View(in.UserID, now))
 	}
 }
 

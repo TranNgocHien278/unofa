@@ -1092,7 +1092,7 @@ func TestW11_NoForeignHandOrDeckInAnyFrame(t *testing.T) {
 				if got := you["user_id"]; got != float64(uid) {
 					t.Fatalf("socket %d got another viewer's hand (you.user_id = %v)", uid, got)
 				}
-				if list, _ := you["hand"].([]any); len(list) != 7 {
+				if list, _ := you["hand"].([]any); f["name"] == "match_start" && len(list) != 7 {
 					t.Fatalf("socket %d match_start hand = %d cards, want 7", uid, len(list))
 				}
 			}
@@ -1174,5 +1174,83 @@ func TestSeq_MonotonicAcrossFullMatch(t *testing.T) {
 		if lastFrame["seq"] == nil {
 			t.Fatalf("socket %d: match_end carries no seq", uid)
 		}
+	}
+}
+
+// TestStatePushAfterAction: every applied batch is followed by a per-viewer
+// `state` frame whose data.seq is the batch's last seq and whose `you` is the
+// socket's own view. After the match settles the room is open again with every
+// lobby_ready flag cleared.
+func TestStatePushAfterAction(t *testing.T) {
+	e := newEnv(t, time.Minute)
+	a, b := e.newPlayer(), e.newPlayer()
+	ca, cb := e.mustDial(a), e.mustDial(b)
+	readUntil(t, ca, "hello")
+	readUntil(t, cb, "hello")
+	matchID := e.startMatch(a, b)
+	conns := map[int64]*websocket.Conn{a.uid: ca, b.uid: cb}
+	caps := handshakeCaptured(t, matchID, conns)
+
+	var cur int64
+	for uid := range conns {
+		if v, ok := e.viewOf(matchID, uid); ok && v.You.IsYourTurn {
+			cur = uid
+		}
+	}
+	if err := sendAction(conns[cur], matchID, "s1", "draw", nil, ""); err != nil {
+		t.Fatalf("draw: %v", err)
+	}
+	for uid, c := range caps {
+		st := c.waitFrame(t, "state push", 5*time.Second, func(f map[string]any) bool {
+			return f["name"] == "state"
+		})
+		d := frameData(st)
+		if d["seq"] != float64(2) {
+			t.Fatalf("socket %d: state seq = %v, want 2", uid, d["seq"])
+		}
+		if _, ok := st["seq"]; ok {
+			t.Fatalf("socket %d: state frame carries a top-level seq", uid)
+		}
+		you, _ := d["you"].(map[string]any)
+		if you["user_id"] != float64(uid) {
+			t.Fatalf("socket %d: state you.user_id = %v", uid, you["user_id"])
+		}
+		hand, _ := you["hand"].([]any)
+		if want := 7; uid == cur {
+			want = 8
+			if len(hand) != want {
+				t.Fatalf("drawer hand = %d, want %d", len(hand), want)
+			}
+		}
+	}
+
+	room, err := e.st.MembershipsForUser(e.ctx, a.uid)
+	if err != nil || len(room) == 0 {
+		t.Fatalf("membership: %v", err)
+	}
+	if err := e.st.SetReady(e.ctx, room[0].RoomID, a.uid, true); err != nil {
+		t.Fatalf("SetReady: %v", err)
+	}
+	if err := e.hub.Forfeit(e.ctx, matchID, a.uid); err != nil {
+		t.Fatalf("Forfeit: %v", err)
+	}
+	caps[b.uid].waitFrame(t, "match_end", 5*time.Second, func(f map[string]any) bool {
+		return f["name"] == "match_end"
+	})
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		r, err := e.st.GetRoomByID(e.ctx, room[0].RoomID)
+		ms, _ := e.st.ListMembers(e.ctx, room[0].RoomID)
+		ready := false
+		for _, m := range ms {
+			ready = ready || m.LobbyReady
+		}
+		if err == nil && r.Status == "open" && !ready {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("room after settle: status=%v ready=%v err=%v, want open and no ready", r.Status, ready, err)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }

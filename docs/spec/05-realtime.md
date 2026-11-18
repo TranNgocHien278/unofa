@@ -49,7 +49,7 @@ Không bao giờ dùng "còn X giây": countdown sẽ trôi khi lag. Server ch�
 
 | `name` | Gửi tới | `data` |
 |---|---|---|
-| `hello` | người kết nối | `{user_id, username, room: {...} \| null, match_id: string \| null}` |
+| `hello` | người kết nối | `{user_id, room: {room_id, seat, code} \| null, match_id: string \| null}` |
 | `room_state` | cả phòng | `{room_id, code, stake, status, host_user_id, players: [{user_id, username, seat, lobby_ready}]}` |
 | `host_changed` | cả phòng | `{host_user_id}` |
 | `ready_check` | từng người | `{match_id}` |
@@ -59,8 +59,11 @@ Không bao giờ dùng "còn X giây": countdown sẽ trôi khi lag. Server ch�
 | `match_end` | cả phòng | `{winner_id, pot, reason: "out_of_cards"\|"last_standing"\|"burn"}` |
 | `balance` | kênh riêng | `{balance, delta, reason}` |
 | `loan` | kênh riêng | `{loan \| null, seized?: bool}` |
+| `state` | kênh riêng từng người | Snapshot đầy đủ theo viewer (cùng shape `GET /api/matches/{id}/state`), gửi sau **mỗi lô** event của ván. Không có `seq` ở top-level; `data.seq` = event cuối của lô. Không gửi sau `match_end`. |
 
 `match_start` gửi **lần đầu tiên** state, sau khi chia bài và trừ tiền xong. `hand` là tay bài của chính người nhận.
+
+`state` có vì event `action` chỉ là delta (không mang lượt hiện tại, `turn_deadline`, số lá). Client coi `state` là sự thật, dùng `action` cho animation và thông báo. Áp `state` khi `data.seq >= last_seq`.
 
 `match_end` chỉ gửi **sau khi thắng được xác nhận** (sau khi `PAYOUT` commit), không gửi lúc tay bài về `0`.
 

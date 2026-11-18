@@ -788,3 +788,26 @@ func TestFixedRNGDeterministic(t *testing.T) {
 	}
 	_ = fmt.Sprint()
 }
+
+// TestView_DrewThisTurn: the flag is set only for the current player after a draw
+// and clears when the turn passes.
+func TestView_DrewThisTurn(t *testing.T) {
+	s, start := newTestMatch(t, deckWith(), twoPlayers())
+	now := start.Add(time.Second)
+	cur := s.players[s.current].UserID
+	if s.View(cur, now).You.DrewThisTurn {
+		t.Fatal("drew_this_turn before drawing")
+	}
+	if _, err := s.Apply(Action{Action: "draw"}, cur, now); err != nil {
+		t.Fatalf("draw: %v", err)
+	}
+	if !s.View(cur, now).You.DrewThisTurn {
+		t.Fatal("drew_this_turn not set after draw")
+	}
+	if _, err := s.Apply(Action{Action: "pass"}, cur, now); err != nil {
+		t.Fatalf("pass: %v", err)
+	}
+	if s.View(cur, now).You.DrewThisTurn {
+		t.Fatal("drew_this_turn still set after pass")
+	}
+}

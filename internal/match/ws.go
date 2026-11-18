@@ -66,7 +66,12 @@ func (h *Hub) ServeWS(sess *session.Manager, allowedOrigin string) http.HandlerF
 		memberships, _ := h.st.MembershipsForUser(r.Context(), uid)
 		var roomInfo any
 		if len(memberships) > 0 {
-			roomInfo = map[string]any{"room_id": memberships[0].RoomID, "seat": memberships[0].Seat}
+			info := map[string]any{"room_id": memberships[0].RoomID, "seat": memberships[0].Seat}
+			// The client routes by code (/room/:code) and reads usernames from GET /api/rooms/{code}.
+			if room, rerr := h.st.GetRoomByID(r.Context(), memberships[0].RoomID); rerr == nil {
+				info["code"] = room.Code
+			}
+			roomInfo = info
 		}
 
 		// Hold wmu across registration and hello so hello is the first frame on this socket.
