@@ -1,7 +1,8 @@
 # UNOFA images, one Dockerfile, two final targets:
 #   app   - Go binaries (unofa + migrate), docs/spec/07-ops-admin.md §Kiến trúc
 #   nginx - TLS edge serving both SPA builds and proxying /api to app
-FROM node:24-slim AS web
+# Builder stages run on the build host's arch; only the final stages are per-platform.
+FROM --platform=$BUILDPLATFORM node:24-slim AS web
 
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json* ./
@@ -9,14 +10,15 @@ RUN npm ci --no-audit --no-fund 2>/dev/null || npm install --no-audit --no-fund
 COPY web/ ./
 RUN npm run build
 
-FROM golang:1.26-alpine AS api
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS api
+ARG TARGETOS TARGETARCH
 
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/unofa ./cmd/unofa \
- && CGO_ENABLED=0 go build -trimpath -ldflags "-s -w" -o /out/migrate ./cmd/migrate
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags "-s -w" -o /out/unofa ./cmd/unofa \
+ && CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags "-s -w" -o /out/migrate ./cmd/migrate
 
 FROM nginx:1.27-alpine AS nginx
 
