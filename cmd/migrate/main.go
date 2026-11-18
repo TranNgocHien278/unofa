@@ -8,6 +8,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io/fs"
 	"log"
 	"os"
 	"path"
@@ -19,6 +20,10 @@ import (
 
 	"github.com/unofa/unofa/migrations"
 )
+
+// migrateLockID is a fixed Postgres session advisory lock key ("UNOFAMIG")
+// so concurrent migrate processes serialize instead of racing on DDL.
+const migrateLockID int64 = 0x554e4f46414d4947
 
 func main() {
 	dir := flag.String("dir", ".", "directory inside the embedded FS holding *.sql")
@@ -43,23 +48,28 @@ func main() {
 }
 
 func run(ctx context.Context, conn *pgx.Conn, dir string) error {
+	return runWithFS(ctx, conn, migrations.FS, dir)
+}
+
+func runWithFS(ctx context.Context, conn *pgx.Conn, fsys fs.FS, dir string) error {
+	if _, err := conn.Exec(ctx, `SELECT pg_advisory_lock($1)`, migrateLockID); err != nil {
+		return fmt.Errorf("acquire lock: %w", err)
+	}
+	defer func() {
+		unlockCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_, _ = conn.Exec(unlockCtx, `SELECT pg_advisory_unlock($1)`, migrateLockID)
+	}()
+
 	if _, err := conn.Exec(ctx, `CREATE TABLE IF NOT EXISTS schema_migrations (
 		version TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())`); err != nil {
 		return err
 	}
 
-	// Get list of *.sql files were embedded. Then filter to prevent wrong file types and sort correctly.
-	entries, err := migrations.FS.ReadDir(dir)
+	names, err := selectMigrations(fsys, dir)
 	if err != nil {
 		return err
 	}
-	names := make([]string, 0, len(entries))
-	for _, e := range entries {
-		if strings.HasSuffix(e.Name(), ".sql") {
-			names = append(names, e.Name())
-		}
-	}
-	sort.Strings(names)
 
 	for _, name := range names {
 		// Check if the migration has already been applied
@@ -73,7 +83,7 @@ func run(ctx context.Context, conn *pgx.Conn, dir string) error {
 		}
 
 		// Read the migration file following abs path
-		body, err := migrations.FS.ReadFile(path.Join(dir, name))
+		body, err := fs.ReadFile(fsys, path.Join(dir, name))
 		if err != nil {
 			return err
 		}
@@ -101,4 +111,30 @@ func run(ctx context.Context, conn *pgx.Conn, dir string) error {
 		log.Printf("applied %s", name)
 	}
 	return nil
+}
+
+// selectMigrations returns sorted up-migration filenames under dir, excluding
+// directories, non-SQL files, and down migrations (*_down.sql, *.down.sql).
+func selectMigrations(fsys fs.FS, dir string) ([]string, error) {
+	entries, err := fs.ReadDir(fsys, dir)
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() || !isUpMigration(e.Name()) {
+			continue
+		}
+		names = append(names, e.Name())
+	}
+	sort.Strings(names)
+	return names, nil
+}
+
+func isUpMigration(name string) bool {
+	lower := strings.ToLower(name)
+	if !strings.HasSuffix(lower, ".sql") {
+		return false
+	}
+	return !strings.HasSuffix(lower, "_down.sql") && !strings.HasSuffix(lower, ".down.sql")
 }

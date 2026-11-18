@@ -1,0 +1,14 @@
+# Agent components
+.claude-flow
+
+# Env
+.env
+config.yaml
+node_modules/
+dist/
+/unofa
+*.out
+
+# build output
+/migrate
+/unofa

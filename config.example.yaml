@@ -22,7 +22,7 @@ redis:
 
 admin:
   - username: "root"
-    bcrypt_hash: "$2a$12$REPLACE_WITH_go_run_./cmd/hashpw"
+    bcrypt_hash: ""
 
 money:
   signup_bonus: 200
@@ -33,7 +33,7 @@ loan:
   packages: [500, 1000, 2000]
   terms:
     - { name: "24h", duration: 24h, rate_bps: 100 }
-    - { name: "3d",  duration: 72h, rate_bps: 300 }
+    - { name: "3d", duration: 72h, rate_bps: 300 }
     - { name: "30d", duration: 720h, rate_bps: 1000 }
   overdue_bps: 500
   cap_multiplier: 2
@@ -61,19 +61,19 @@ log:
 
 # App-layer rate limits (docs/spec/04-http-api.md §Rate limit).
 rate:
-  login_per_ip:          { limit: 5,  period: 1m }
-  login_per_username:    { limit: 10, period: 1h }
+  login_per_ip: { limit: 5, period: 1m }
+  login_per_username: { limit: 10, period: 1h }
   login_lock: 15m
-  register_per_ip:       { limit: 10, period: 1h }
-  heartbeat_per_session: { limit: 3,  period: 1m }
-  ws_actions_per_user:   { limit: 5,  period: 1s }
-  ws_uno_per_user:       { limit: 2,  period: 1s }
-  match_state_per_user:  { limit: 60, period: 1m }
-  money_per_user:        { limit: 20, period: 1m }
-  credential_per_user:   { limit: 10, period: 1m }
-  read_per_user:         { limit: 60, period: 1m }
-  room_create_per_user:  { limit: 10, period: 1m }
-  room_join_per_user:    { limit: 20, period: 1m }
-  admin_login_per_ip:    { limit: 5,  period: 1m }
-  admin_per_admin:       { limit: 60, period: 1m }
-  ws_messages_per_conn:  { limit: 10, period: 1s }
+  register_per_ip: { limit: 10, period: 1h }
+  heartbeat_per_session: { limit: 3, period: 1m }
+  ws_actions_per_user: { limit: 5, period: 1s }
+  ws_uno_per_user: { limit: 2, period: 1s }
+  match_state_per_user: { limit: 60, period: 1m }
+  money_per_user: { limit: 20, period: 1m }
+  credential_per_user: { limit: 10, period: 1m }
+  read_per_user: { limit: 60, period: 1m }
+  room_create_per_user: { limit: 10, period: 1m }
+  room_join_per_user: { limit: 20, period: 1m }
+  admin_login_per_ip: { limit: 5, period: 1m }
+  admin_per_admin: { limit: 60, period: 1m }
+  ws_messages_per_conn: { limit: 10, period: 1s }
