@@ -108,59 +108,57 @@ type AdminAccountDetail struct {
 
 // MetricRequests returns bucketed request counts by endpoint, for the admin chart.
 func (s *Store) MetricRequests(ctx context.Context, rng string) ([]map[string]any, error) {
-	buckets := metricBuckets(rng)
 	ctx, cancel := s.timeoutCtx(ctx)
 	defer cancel()
 	rows, err := s.db.Query(ctx, `
-		SELECT date_trunc($1, at) AS bucket, endpoint, count(*) AS n
-		FROM http_log
-		WHERE at >= now() - $2::interval
+		SELECT b.bucket, COALESCE(l.endpoint, ''), count(l.id)
+		FROM `+bucketSeries+`
+		LEFT JOIN http_log l ON l.at >= now() - $2::interval AND date_trunc($1, l.at) = b.bucket
 		GROUP BY 1, 2 ORDER BY 1`, bucketTrunc(rng), bucketInterval(rng))
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	type key struct{ b, e string }
-	m := map[key]int64{}
+	byEp := map[string]map[string]int64{}
 	var order []string
-	seen := map[string]bool{}
 	for rows.Next() {
-		var bucket string
+		var at time.Time
 		var endpoint string
 		var n int64
-		if err := rows.Scan(&bucket, &endpoint, &n); err != nil {
+		if err := rows.Scan(&at, &endpoint, &n); err != nil {
 			return nil, err
 		}
-		if !seen[bucket] {
+		bucket := at.UTC().Format(time.RFC3339)
+		if byEp[bucket] == nil {
 			order = append(order, bucket)
-			seen[bucket] = true
+			byEp[bucket] = map[string]int64{}
 		}
-		m[key{bucket, endpoint}] = n
+		if endpoint != "" {
+			byEp[bucket][endpoint] = n
+		}
 	}
-	_ = buckets
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	out := make([]map[string]any, 0, len(order))
-	byEp := map[string]map[string]int64{}
 	for _, b := range order {
-		for k, v := range m {
-			if k.b == b {
-				if byEp[b] == nil {
-					byEp[b] = map[string]int64{}
-				}
-				byEp[b][k.e] = v
-			}
-		}
 		out = append(out, map[string]any{"at": b, "by_endpoint": byEp[b]})
 	}
 	return out, nil
 }
+
+// bucketSeries lists every bucket in the range, so a quiet hour reads as zero
+// instead of vanishing from the time axis.
+const bucketSeries = `generate_series(date_trunc($1, now() - $2::interval), date_trunc($1, now()), ('1 ' || $1)::interval) AS b(bucket)`
 
 // MetricStatusCodes returns bucketed HTTP status code counts.
 func (s *Store) MetricStatusCodes(ctx context.Context, rng string) ([]map[string]any, error) {
 	ctx, cancel := s.timeoutCtx(ctx)
 	defer cancel()
 	rows, err := s.db.Query(ctx, `
-		SELECT date_trunc($1, at) AS bucket, status_code::text, count(*) AS n
-		FROM http_log WHERE at >= now() - $2::interval
+		SELECT b.bucket, COALESCE(l.status_code::text, ''), count(l.id)
+		FROM `+bucketSeries+`
+		LEFT JOIN http_log l ON l.at >= now() - $2::interval AND date_trunc($1, l.at) = b.bucket
 		GROUP BY 1, 2 ORDER BY 1`, bucketTrunc(rng), bucketInterval(rng))
 	if err != nil {
 		return nil, err
@@ -170,11 +168,13 @@ func (s *Store) MetricStatusCodes(ctx context.Context, rng string) ([]map[string
 	var order []string
 	seen := map[string]bool{}
 	for rows.Next() {
-		var bucket, code string
+		var at time.Time
+		var code string
 		var n int64
-		if err := rows.Scan(&bucket, &code, &n); err != nil {
+		if err := rows.Scan(&at, &code, &n); err != nil {
 			return nil, err
 		}
+		bucket := at.UTC().Format(time.RFC3339)
 		if !seen[bucket] {
 			order = append(order, bucket)
 			seen[bucket] = true
@@ -182,7 +182,12 @@ func (s *Store) MetricStatusCodes(ctx context.Context, rng string) ([]map[string
 		if byCodes[bucket] == nil {
 			byCodes[bucket] = map[string]int64{}
 		}
-		byCodes[bucket][code] = n
+		if code != "" {
+			byCodes[bucket][code] = n
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	out := make([]map[string]any, 0, len(order))
 	for _, b := range order {
@@ -218,5 +223,3 @@ func bucketInterval(rng string) string {
 		return "30 days"
 	}
 }
-
-func metricBuckets(rng string) []string { return nil }
