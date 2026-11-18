@@ -69,10 +69,21 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # ghcr.io requires a lowercase repository path.
+      - run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
       - uses: docker/build-push-action@v6
         with:
           context: .
+          target: app
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}:${{ github.sha }}
-            ghcr.io/${{ github.repository }}:latest
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: nginx
+          push: true
+          tags: |
+            ${{ env.IMAGE }}-nginx:${{ github.sha }}
+            ${{ env.IMAGE }}-nginx:latest
