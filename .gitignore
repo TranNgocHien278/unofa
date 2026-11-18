@@ -1,5 +1,7 @@
 # Agent components
 .claude-flow
+.impeccable
+.playwright-mcp
 
 # Env
 .env
