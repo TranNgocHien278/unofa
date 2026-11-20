@@ -230,7 +230,7 @@ func TestSeizeJobSeizesLoanAtCapOnce(t *testing.T) {
 	addJobUser(t, st, 1)
 	l := disburseAt(t, st, 1, time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC))
 
-	clk := &clock.Fake{T: ledger.SeizeAt(500, 100, l.DueAt, cfg.OverdueBps, cfg.CapMultiplier)}
+	clk := &clock.Fake{T: ledger.SeizeAt(l.DueAt)}
 
 	affected, err := runSeize(ctx, st, clk, cfg)
 	if err != nil {
@@ -317,7 +317,7 @@ func TestSeizeJobIsolatesFailingLoan(t *testing.T) {
 			`DROP TRIGGER IF EXISTS jobs_test_fail_seize ON admin_flags; DROP FUNCTION IF EXISTS jobs_test_fail_seize();`)
 	})
 
-	clk := &clock.Fake{T: ledger.SeizeAt(500, 100, l1.DueAt, cfg.OverdueBps, cfg.CapMultiplier)}
+	clk := &clock.Fake{T: ledger.SeizeAt(l1.DueAt)}
 	if _, err := runSeize(ctx, st, clk, cfg); err == nil {
 		t.Fatal("runSeize: want injected error, got nil")
 	}

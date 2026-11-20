@@ -181,8 +181,7 @@ func runSeize(ctx context.Context, st *store.Store, clk clock.Clock, lcfg loan.L
 		if err := rows.Scan(&c.loanID, &c.userID, &c.principal, &c.rateBps, &c.dueAt); err != nil {
 			return 0, err
 		}
-		owed, _ := ledger.Owed(c.principal, c.rateBps, c.dueAt, now, lcfg.OverdueBps, lcfg.CapMultiplier)
-		if owed >= c.principal*lcfg.CapMultiplier {
+		if !now.Before(ledger.SeizeAt(c.dueAt)) {
 			candidates = append(candidates, c)
 		}
 	}
@@ -234,7 +233,7 @@ func seizeLoan(ctx context.Context, tx pgx.Tx, loanID int64, now time.Time, cfg 
 		return false, err
 	}
 	owed, _ := ledger.Owed(principal, rateBps, dueAt, now, cfg.OverdueBps, cfg.CapMultiplier)
-	if owed < principal*cfg.CapMultiplier {
+	if now.Before(ledger.SeizeAt(dueAt)) {
 		return false, nil
 	}
 

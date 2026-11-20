@@ -172,7 +172,7 @@ func Active(ctx context.Context, tx pgx.Tx, userID int64, now time.Time, cfg Loa
 	l.DueAt = row.dueAt
 
 	owed, periods := ledger.Owed(l.Principal, l.RateBps, l.DueAt, now, cfg.OverdueBps, cfg.CapMultiplier)
-	seizeAt := ledger.SeizeAt(l.Principal, l.RateBps, l.DueAt, cfg.OverdueBps, cfg.CapMultiplier)
+	seizeAt := ledger.SeizeAt(l.DueAt)
 
 	return ActiveLoan{
 		LoanID:         l.LoanID,
@@ -245,8 +245,7 @@ func SeizeDue(ctx context.Context, tx pgx.Tx, now time.Time, cfg LoanCfg) ([]Sei
 		if err := rows.Scan(&c.loanID, &c.userID, &c.principal, &c.rateBps, &c.dueAt); err != nil {
 			return nil, err
 		}
-		owed, _ := ledger.Owed(c.principal, c.rateBps, c.dueAt, now, cfg.OverdueBps, cfg.CapMultiplier)
-		if owed >= c.principal*cfg.CapMultiplier {
+		if !now.Before(ledger.SeizeAt(c.dueAt)) {
 			candidates = append(candidates, c)
 		}
 	}

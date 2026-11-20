@@ -82,12 +82,11 @@ func TestT9_GoldenLoanSeries(t *testing.T) {
 	}
 }
 
-// T9: seize fires exactly at n = 14, not 15.
+// Seize fires at due_at + 14d, whatever the package.
 func TestT9_SeizeAtFourteenPeriods(t *testing.T) {
-	cfg := testCfg()
 	dueAt := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
-	got := ledger.SeizeAt(500, 100, dueAt, cfg.OverdueBps, cfg.CapMultiplier)
+	got := ledger.SeizeAt(dueAt)
 	want := dueAt.Add(14 * 24 * time.Hour)
 	if !got.Equal(want) {
 		t.Errorf("SeizeAt = %s, want %s", got, want)
