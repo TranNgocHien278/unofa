@@ -1,6 +1,6 @@
 # UNOFA images, one Dockerfile, two final targets:
 #   app   - Go binaries (unofa + migrate), docs/spec/07-ops-admin.md §Kiến trúc
-#   nginx - TLS edge serving both SPA builds and proxying /api to app
+#   nginx - TLS edge serving both SPA builds and proxying /api to app; site configs are mounted from deploy/nginx at runtime
 # Builder stages run on the build host's arch; only the final stages are per-platform.
 FROM --platform=$BUILDPLATFORM node:24-slim AS web
 
@@ -22,8 +22,6 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags 
 
 FROM nginx:1.27-alpine AS nginx
 
-COPY deploy/nginx/uno.conf /etc/nginx/conf.d/default.conf
-COPY deploy/nginx/admin.conf /etc/nginx/conf.d/admin.conf
 COPY --chmod=755 deploy/nginx/admin-toggle.sh /docker-entrypoint.d/05-admin-toggle.sh
 COPY --from=web /src/web/dist/game /srv/uno
 COPY --from=web /src/web/dist/admin /srv/admin

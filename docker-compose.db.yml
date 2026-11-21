@@ -1,0 +1,32 @@
+# UNOFA Postgres as its own compose project, so app stacks (docker-compose.yml, blue/green later)
+# can be recreated or taken down without touching the DB.
+# Start before the app stack: docker compose -f docker-compose.db.yml up -d --wait
+name: unofa-db
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: unofa
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: unofa
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backups:/backups
+    networks: [db]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U unofa -d unofa"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+networks:
+  db:
+    name: unofa-db
+
+volumes:
+  pgdata:
+    # Kept from the single-stack layout (project unofa). External: compose never creates or deletes it, not even `down -v`.
+    name: unofa_pgdata
+    external: true

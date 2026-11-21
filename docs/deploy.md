@@ -10,8 +10,8 @@ Tài liệu này đi từ một VPS đã cài Docker đến khi chạy đủ hai
 ```
 Internet ──► VPS cổng 80/443 ──► container nginx ──┬─► file giao diện (game, admin), có sẵn trong image
                                                    └─► /api/... ──► container app (Go)
-                                                                       ├─► db (Postgres)
-                                                                       └─► redis
+                                                                       ├─► redis
+                                                                       └─► db (Postgres, stack riêng, qua mạng unofa-db)
 ```
 
 | Container | Image                                 | Vai trò                                                                       |
@@ -19,10 +19,21 @@ Internet ──► VPS cổng 80/443 ──► container nginx ──┬─► f
 | `nginx`   | `ghcr.io/tranngochien278/unofa-nginx` | Cửa vào duy nhất. HTTPS, giới hạn request, trả giao diện, chuyển `/api` vào app |
 | `app`     | `ghcr.io/tranngochien278/unofa`       | Backend Go. Cổng 8080 (game), 8081 (admin), chỉ mở trong mạng Docker            |
 | `migrate` | `ghcr.io/tranngochien278/unofa`       | Chạy migration DB một lần rồi thoát (`Exited (0)` là bình thường)               |
-| `db`      | `postgres:16-alpine`                  | Dữ liệu, lưu trong volume `pgdata`                                              |
+| `db`      | `postgres:16-alpine`                  | Dữ liệu, lưu trong volume `unofa_pgdata`                                        |
 | `redis`   | `redis:7-alpine`                      | Session, rate limit                                                             |
 
-Hai image `unofa` và `unofa-nginx` build từ cùng một `Dockerfile` (target `app` và `nginx`). Image chỉ chứa binary và file build sẵn, không chứa source code. VPS không cần source code, chỉ cần 3 file: `docker-compose.yml`, `.env`, `config.yaml`.
+Container chia thành hai stack (compose project), bật tắt độc lập:
+
+| Stack      | File                    | Container                          |
+| ---------- | ----------------------- | ---------------------------------- |
+| `unofa-db` | `docker-compose.db.yml` | `db`. Tạo mạng Docker `unofa-db`   |
+| `unofa`    | `docker-compose.yml`    | `nginx`, `app`, `migrate`, `redis` |
+
+`app` và `migrate` nối vào mạng `unofa-db` để gọi `db:5432`. DB tách riêng nên deploy lại app, `docker compose down` stack app, hay sau này chạy song song hai bản app (blue/green) đều không đụng tới DB.
+
+Conf nginx (`deploy/nginx/*.conf`) không nằm trong image. Compose mount thư mục `deploy/nginx` vào container nginx (chỉ đọc). Khi container khởi động, script `admin-toggle.sh` có sẵn trong image nối các file `.conf` vào nginx. Sửa conf không cần build lại image (mục 7).
+
+Hai image `unofa` và `unofa-nginx` build từ cùng một `Dockerfile` (target `app` và `nginx`). Image chỉ chứa binary và file build sẵn, không chứa source code. VPS không cần source code, chỉ cần: `docker-compose.yml`, `docker-compose.db.yml`, `.env`, `config.yaml` và thư mục `deploy/nginx/`.
 
 ## 2. Mạng: inbound, outbound, domain
 
@@ -99,7 +110,7 @@ docker buildx build --platform linux/amd64,linux/arm64 --target nginx -t ghcr.io
 
 Kết quả: GitHub → **Profile → Packages** có `unofa` và `unofa-nginx`.
 
-Image nginx chứa sẵn `deploy/nginx/*.conf` và giao diện. Sửa conf nginx hoặc code giao diện thì phải build và push lại.
+Image nginx chỉ chứa giao diện. Sửa code giao diện thì phải build và push lại. Sửa `deploy/nginx/*.conf` thì không cần build, chỉ gửi file lên VPS (mục 7).
 
 ### 3.3 Tạo `config.yaml` và `.env`
 
@@ -124,14 +135,17 @@ sed -i "s/^POSTGRES_PASSWORD=.*/POSTGRES_PASSWORD=$(openssl rand -hex 16)/" .env
 
 Tên image (`ghcr.io/tranngochien278/unofa:latest`, `...unofa-nginx:latest`) ghi cố định trong `docker-compose.yml`.
 
-Compose chỉ dùng `.env` để điền `${...}` trong `docker-compose.yml`. Container chỉ nhận biến được khai báo ở `environment:` của service đó.
+Compose chỉ dùng `.env` để điền `${...}` trong `docker-compose.yml` và `docker-compose.db.yml`. Container chỉ nhận biến được khai báo ở `environment:` của service đó.
 
 ### 3.4 Gửi file lên VPS
 
 ```sh
-ssh ubuntu@IP_VPS "sudo mkdir -p /opt/unofa && sudo chown ubuntu /opt/unofa"
-scp docker-compose.yml .env config.yaml ubuntu@IP_VPS:/opt/unofa/
+ssh ubuntu@IP_VPS "sudo mkdir -p /opt/unofa/deploy/nginx && sudo chown -R ubuntu /opt/unofa"
+scp docker-compose.yml docker-compose.db.yml .env config.yaml ubuntu@IP_VPS:/opt/unofa/
+scp deploy/nginx/*.conf ubuntu@IP_VPS:/opt/unofa/deploy/nginx/
 ```
+
+Conf nginx phải nằm đúng `/opt/unofa/deploy/nginx/`: compose mount đường dẫn `./deploy/nginx` tính từ thư mục chứa `docker-compose.yml`.
 
 ## 4. Cài đặt trên VPS
 
@@ -186,21 +200,27 @@ Lỗi `The Certificate Authority failed to download the challenge files`: cổng
 
 ```sh
 cd /opt/unofa
+docker volume create unofa_pgdata
+docker compose -f docker-compose.db.yml up -d --wait
 docker compose pull
 docker compose up -d --no-build
 ```
 
-`--no-build` bắt buộc trên VPS: không có `Dockerfile` ở đây, compose chỉ được pull image.
+- `docker volume create` cần cho máy mới, chạy lại khi volume đã có thì không sao. Volume khai báo `external` nên compose không bao giờ tự tạo hay xoá nó, kể cả `down -v`.
+- Bật stack DB trước: nó tạo mạng `unofa-db` mà stack app cần. `--wait` chờ Postgres `healthy`, vì `migrate` chỉ thử kết nối một lần rồi thoát.
+- `--no-build` bắt buộc trên VPS: không có `Dockerfile` ở đây, compose chỉ được pull image.
 
 ## 5. Kiểm tra
 
 ```sh
+docker compose -f docker-compose.db.yml ps
 docker compose ps
 curl -sSI https://uno.tnhien.tech/healthz | head -1
 curl -sSI https://admin.tnhien.tech | head -1
 ```
 
-- `app`, `db`, `redis`, `nginx`: `Up` (app có thêm `healthy`). `migrate`: `Exited (0)`.
+- `db`: `Up (healthy)`.
+- `app`, `redis`, `nginx`: `Up` (app có thêm `healthy`). `migrate`: `Exited (0)`.
 - Hai lệnh `curl` trả `HTTP/2 200`. `curl` tự kiểm tra cert, lỗi cert sẽ báo `SSL certificate problem`.
 - Mở `https://uno.tnhien.tech` để chơi. Mở `https://admin.tnhien.tech`, đăng nhập user `root` với mật khẩu đã hash ở bước 3.3.
 
@@ -233,9 +253,20 @@ Khi `UNOFA_ADMIN=false`, log có dòng `admin site disabled`. Listener admin c�
    docker compose up -d --no-build
    ```
 
-Compose tự chạy lại `migrate` trước khi khởi động `app`. Dữ liệu DB giữ nguyên trong volume `pgdata`.
+Compose tự chạy lại `migrate` trước khi khởi động `app`. Stack DB không bị khởi động lại, dữ liệu nằm trong volume `unofa_pgdata`.
+
+Đang chạy bản cũ (`db` còn nằm trong `docker-compose.yml`)? Làm mục 10 một lần trước.
 
 Sửa `config.yaml` trên VPS thì chạy `docker compose restart app`. Sửa `.env` thì chạy `docker compose up -d --no-build`.
+
+Sửa conf nginx: gửi file lên (máy local), rồi nạp lại (VPS):
+
+```sh
+scp deploy/nginx/*.conf ubuntu@IP_VPS:/opt/unofa/deploy/nginx/
+docker compose exec nginx nginx -t && docker compose exec nginx nginx -s reload
+```
+
+`nginx -t` kiểm tra cú pháp trước. `reload` nạp conf mới mà không ngắt kết nối đang mở, WebSocket của ván đang chơi vẫn giữ. Thêm hoặc xoá file `.conf` thì phải `docker compose restart nginx`, lệnh này ngắt mọi kết nối vài giây.
 
 ## 8. Gia hạn cert
 
@@ -269,5 +300,38 @@ sudo certbot renew --dry-run
 | Trình duyệt báo "Not secure" ở admin                           | Nginx chưa nạp `admin.conf`, trả cert của uno  | `UNOFA_ADMIN=true`, `docker compose up -d --no-build --force-recreate nginx` |
 | App khởi động lại liên tục                                     | `config.yaml` sai hoặc thiếu `bcrypt_hash`     | `docker compose logs app`                                  |
 | Đăng nhập admin bị chặn                                        | `admin_origin` sai domain                      | Sửa `config.yaml`, `docker compose restart app`            |
+| `network unofa-db declared as external, but could not be found` | Stack DB chưa chạy                            | Bật stack DB trước (mục 4.5)                               |
+| `external volume "unofa_pgdata" not found`                     | Máy mới, chưa tạo volume                       | `docker volume create unofa_pgdata` (mục 4.5)              |
+| `service "migrate" didn't complete successfully`               | DB chưa `healthy`, hoặc sai `POSTGRES_PASSWORD` | `docker compose logs migrate`, rồi chạy lại mục 4.5        |
+| Nginx khởi động lại liên tục, log `admin-toggle: no *.conf`    | Thiếu `/opt/unofa/deploy/nginx/*.conf`         | Mục 3.4                                                    |
 
-Xem log: `docker compose logs <service> | tail -50`.
+Xem log: `docker compose logs <service> | tail -50`. Log DB: `docker compose -f docker-compose.db.yml logs db | tail -50`.
+
+## 10. Chuyển từ cách deploy cũ (làm một lần)
+
+Cách cũ: `db` nằm trong `docker-compose.yml`, conf nginx nằm trong image. Cách mới dùng lại đúng volume `unofa_pgdata` của cách cũ, không cần chép dữ liệu.
+
+Làm đúng thứ tự dưới đây. Hai container Postgres cùng chạy trên một volume sẽ làm hỏng dữ liệu, nên container `db` cũ phải tắt hẳn trước khi bật stack DB mới.
+
+1. Máy local: đợi CI build xong image `unofa-nginx` mới sau khi push lên `main`, hoặc build tay (mục 3.2). Image nginx cũ vẫn chạy được với compose mới nhưng bỏ qua conf mount vào.
+2. VPS: backup DB. Container cũ tên `unofa-db-1` (xem bằng `docker ps`):
+   ```sh
+   cd /opt/unofa
+   docker exec unofa-db-1 pg_dump -U unofa -Fc unofa > before-split.dump
+   ls -lh before-split.dump
+   ```
+3. VPS: tắt toàn bộ stack cũ, giữ volume (không thêm `-v`):
+   ```sh
+   docker compose down --remove-orphans
+   docker ps -a --filter volume=unofa_pgdata
+   ```
+   Lệnh thứ hai phải không in ra container nào. `--remove-orphans` xoá luôn `db` cũ nếu `docker-compose.yml` mới đã lỡ được gửi lên trước.
+4. VPS: `docker volume ls | grep pgdata` phải ra `unofa_pgdata`. Nếu ra tên khác (thư mục deploy không tên `unofa`), sửa `name:` cuối file `docker-compose.db.yml` cho khớp.
+5. Máy local: gửi file mới (mục 3.4).
+6. VPS: chạy mục 4.5, rồi kiểm tra mục 5.
+
+Dữ liệu sai sau khi chuyển thì khôi phục từ bản backup:
+
+```sh
+docker compose -f docker-compose.db.yml exec -T db pg_restore -U unofa -d unofa --clean --if-exists < before-split.dump
+```
