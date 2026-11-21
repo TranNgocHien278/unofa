@@ -14,6 +14,10 @@
   --floor-blue: oklch(0.91 0.04 245);
   --floor-none: oklch(0.94 0.01 90);
 
+  /* Round table top: wood, its rim and grain. */
+  --wood: oklch(0.6 0.1 60);
+  --wood-rim: oklch(0.47 0.09 52);
+
   --ink: var(--card-ink);
   --ink-2: oklch(0.4 0.012 80);
   --paper: var(--card-paper);

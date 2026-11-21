@@ -457,21 +457,50 @@ func TestR16_Wild4LastCardCorrectChallengeContinues(t *testing.T) {
 	}
 }
 
-// R17: call_uno is legal with exactly two cards and a playable card on your turn.
-func TestR17_CallUnoWithTwoPlayable(t *testing.T) {
+// R17: call_uno with two cards is refused, even on your own turn with a playable
+// card: UNO belongs to the one-card moment only.
+func TestR17_CallUnoRefusedWithTwoCards(t *testing.T) {
 	s, now := newTestMatch(t, deckWith(), twoPlayers())
 	forceTop(s, Card{Red, R5}, Red)
 	forceHand(s, 1, Card{Red, R7}, Card{Blue, R1})
 	forceTurn(s, 1, now.Add(20*time.Second))
 
-	if !s.canCallUno(1) {
-		t.Fatal("R17: can_call_uno should be true")
+	if s.canCallUno(1) || s.View(1, *now).You.CanCallUno {
+		t.Fatal("R17: can_call_uno should be false with two cards")
+	}
+	_, err := s.Apply(Action{Action: "call_uno"}, 1, *now)
+	if err == nil || !strings.Contains(err.Error(), "CANNOT_CALL_UNO") {
+		t.Fatalf("R17: err = %v, want CANNOT_CALL_UNO", err)
+	}
+	if s.players[0].UnoCalled {
+		t.Fatal("R17: uno_called must stay false")
+	}
+}
+
+// R17: playing the second-to-last card opens the call: with one card left
+// can_call_uno is true and call_uno is accepted, which also closes the catch.
+func TestR17_CallUnoAcceptedWithOneCard(t *testing.T) {
+	s, now := newTestMatch(t, deckWith(), []PlayerInit{{1, 0}, {2, 1}, {3, 2}})
+	forceTop(s, Card{Red, R5}, Red)
+	forceHand(s, 1, Card{Red, R7}, Card{Blue, R1})
+	forceHand(s, 2, Card{Blue, R2})
+	forceHand(s, 3, Card{Green, R3})
+	forceTurn(s, 1, now.Add(20*time.Second))
+
+	if _, err := s.Apply(Action{Action: "play", Card: &WireCard{"RED", "7"}}, 1, *now); err != nil {
+		t.Fatalf("R17: play: %v", err)
+	}
+	if !s.canCallUno(1) || !s.View(1, *now).You.CanCallUno {
+		t.Fatal("R17: can_call_uno should be true with one card left")
 	}
 	if _, err := s.Apply(Action{Action: "call_uno"}, 1, *now); err != nil {
 		t.Fatalf("R17: call_uno: %v", err)
 	}
 	if !s.players[0].UnoCalled {
 		t.Fatal("R17: uno_called should be set")
+	}
+	if s.canCatchUno(2) != nil {
+		t.Fatal("R17: a called UNO cannot be caught")
 	}
 }
 
@@ -528,27 +557,36 @@ func TestR19_CatchUnoTwice(t *testing.T) {
 	}
 }
 
-// R20: uno_called clears when the hand grows back above one card.
+// R20: uno_called clears when the hand grows back above one card: called at one
+// card, then a +2 lands on them, so the flag resets and calling is refused again.
 func TestR20_UnoCalledClearsWhenHandGrows(t *testing.T) {
-	s, now := newTestMatch(t, deckWith(Card{Green, R9}), []PlayerInit{{1, 0}, {2, 1}, {3, 2}})
+	s, now := newTestMatch(t, deckWith(), twoPlayers())
 	forceTop(s, Card{Red, R5}, Red)
 	forceHand(s, 1, Card{Red, R7}, Card{Blue, R1})
-	forceHand(s, 2, Card{Blue, R2})
-	forceHand(s, 3, Card{Green, R3})
+	forceHand(s, 2, Card{Red, Draw2}, Card{Blue, R2}, Card{Blue, R3})
 	forceTurn(s, 1, now.Add(20*time.Second))
 
+	if _, err := s.Apply(Action{Action: "play", Card: &WireCard{"RED", "7"}}, 1, *now); err != nil {
+		t.Fatalf("R20: play: %v", err)
+	}
 	if _, err := s.Apply(Action{Action: "call_uno"}, 1, *now); err != nil {
 		t.Fatalf("R20: call_uno: %v", err)
 	}
 	if !s.players[0].UnoCalled {
 		t.Fatal("R20: flag should be set")
 	}
-	// Player 2 draws nothing useful, player 3 draws; then player 1 is caught and
-	// draws two, which must clear the flag.
-	forceTurn(s, 3, now.Add(20*time.Second))
-	s.drawNFor(0, 2)
-	if s.players[0].UnoCalled {
+	if _, err := s.Apply(Action{Action: "play", Card: &WireCard{"RED", "DRAW2"}}, 2, *now); err != nil {
+		t.Fatalf("R20: draw2: %v", err)
+	}
+	if got := len(s.players[0].Hand); got != 3 {
+		t.Fatalf("R20: hand = %d, want 3", got)
+	}
+	if s.players[0].UnoCalled || s.View(2, *now).Public.Players[0].UnoCalled {
 		t.Fatal("R20: flag should clear when the hand grows above one")
+	}
+	_, err := s.Apply(Action{Action: "call_uno"}, 1, *now)
+	if err == nil || !strings.Contains(err.Error(), "CANNOT_CALL_UNO") {
+		t.Fatalf("R20: call_uno after the +2: err = %v, want CANNOT_CALL_UNO", err)
 	}
 }
 

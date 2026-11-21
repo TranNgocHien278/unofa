@@ -8,7 +8,8 @@ export interface Bubble {
   loud: boolean
 }
 
-// useAnnouncement turns the last action event into one short speech bubble.
+// useAnnouncement turns the last action event into one short line for the screen
+// reader's live region.
 // Plain number plays return null: the discard pile already announces its top card.
 export function useAnnouncement(a: Announce | null, nameOf: (id?: number | null) => string, meId: number): Bubble | null {
   const { t } = useTranslation()

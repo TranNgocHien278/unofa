@@ -21,6 +21,7 @@ import { sound } from '../../lib/sound'
 import { playable, sortHand, type KeyedCard } from './rules'
 import { ChallengeDialog, ColorPicker, TableMenu, WinnerPanel } from './TableDialogs'
 import { useAnnouncement } from './announce'
+import { DrawFlights } from './DrawFlights'
 
 const FLOOR: Record<Color, string> = {
   RED: 'var(--floor-red)',
@@ -57,37 +58,47 @@ function Floor({ color, origin }: { color: Color; origin: { x: number; y: number
   )
 }
 
-function SeatChip({
+// One pile of card backs per player round the table: name on top, count in the
+// middle, and a glow while it is that player's move. `angle` is in degrees with
+// 90 at the bottom, so seats run clockwise from me.
+function Seat({
   p,
   name,
-  current,
-  innerRef,
+  turn,
+  angle,
+  pileRef,
 }: {
   p: PublicPlayer
   name: string
-  current: boolean
-  innerRef(el: HTMLLIElement | null): void
+  turn: boolean
+  angle: number
+  pileRef(el: HTMLSpanElement | null): void
 }) {
   const { t } = useTranslation()
-  const reduce = useReducedMotion()
   const out = p.status === 'forfeit'
+  const rad = (angle * Math.PI) / 180
   return (
-    <li ref={innerRef} className={`tseat ${current ? 'tseat--turn' : ''} ${out ? 'tseat--out' : ''}`} aria-current={current ? 'true' : undefined}>
-      <motion.span
-        className="avatar"
-        aria-hidden
-        animate={current && !reduce ? { y: [0, -5, 0], scaleY: [1, 1.06, 0.94, 1] } : { y: 0, scaleY: 1 }}
-        transition={current && !reduce ? { duration: 0.9, repeat: Infinity, ease: 'easeInOut' } : { duration: 0.2 }}
-      >
-        {name.slice(0, 1).toUpperCase()}
-      </motion.span>
-      <span className="tseat__body">
-        <span className="tseat__name">{name}</span>
-        <span className="tseat__count num">{t('table.cards', { count: p.hand_count })}</span>
+    <li
+      className={`seat ${turn ? 'seat--turn' : ''} ${out ? 'seat--out' : ''}`}
+      style={{ ['--x' as string]: Math.cos(rad).toFixed(4), ['--y' as string]: Math.sin(rad).toFixed(4) }}
+      aria-current={turn ? 'true' : undefined}
+    >
+      <span className="seat__name">{name}</span>
+      <span className="seat__pile" ref={pileRef}>
+        <span className="seat__card seat__card--under" aria-hidden>
+          <CardBack />
+        </span>
+        <span className="seat__card" aria-hidden>
+          <CardBack />
+        </span>
+        <span className="seat__count num" aria-hidden>
+          {p.hand_count}
+        </span>
       </span>
-      {p.status === 'disconnected' && <span className="stamp stamp--alert tseat__stamp">{t('table.offlineStamp')}</span>}
-      {out && <span className="stamp stamp--ink tseat__stamp">{t('table.outStamp')}</span>}
-      {!out && p.uno_called && p.hand_count === 1 && <span className="stamp stamp--alert tseat__stamp">UNO!</span>}
+      <span className="sr-only">{t('table.cards', { count: p.hand_count })}</span>
+      {p.status === 'disconnected' && <span className="stamp stamp--alert seat__stamp">{t('table.offlineStamp')}</span>}
+      {out && <span className="stamp stamp--ink seat__stamp">{t('table.outStamp')}</span>}
+      {!out && p.uno_called && p.hand_count === 1 && <span className="stamp stamp--alert seat__stamp">UNO!</span>}
     </li>
   )
 }
@@ -95,7 +106,6 @@ function SeatChip({
 export default function TablePage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const reduce = useReducedMotion()
   const matchId = useParams().matchId ?? ''
   const m = useMatch()
   const meId = useSession((s) => s.user?.userId ?? 0)
@@ -107,6 +117,7 @@ export default function TablePage() {
   const [playKey, setPlayKey] = useState<string | null>(null)
   const handRef = useRef<HandHandle>(null)
   const tableRef = useRef<HTMLDivElement>(null)
+  const drawRef = useRef<HTMLButtonElement>(null)
   const discardRef = useRef<HTMLDivElement>(null)
   const seatEls = useRef(new Map<number, HTMLElement>())
   const [floorAt, setFloorAt] = useState({ x: 200, y: 300 })
@@ -205,7 +216,11 @@ export default function TablePage() {
       </div>
     )
 
-  const myTurn = m.you.isYourTurn && pub.phase === 'playing'
+  const yourTurn = m.you.isYourTurn && pub.phase === 'playing'
+  // Cards in the air lock the table until the last one lands; the next turn's
+  // frames wait in the store meanwhile.
+  const locked = m.flights.length > 0
+  const myTurn = yourTurn && !locked
   const drawnOnly = m.you.drewThisTurn
   const isPlayable = (c: Card) => {
     if (!myTurn || m.pendingAction) return false
@@ -214,16 +229,20 @@ export default function TablePage() {
   }
   const pendingKey = m.pendingAction ? (cards.find((k) => sameCard(k.card, m.pendingAction!.card))?.key ?? null) : null
   const current = pub.players.find((p) => p.user_id === pub.current_player)
-  const meSeat = pub.players.find((p) => p.user_id === meId)
-  // Opponents in turn order starting after me.
-  const others = (() => {
+  // Everyone in turn order starting with me, so I sit at the bottom of the table.
+  const seats = (() => {
     const sorted = [...pub.players].sort((a, b) => a.seat - b.seat)
     const i = sorted.findIndex((p) => p.user_id === meId)
-    return i < 0 ? sorted : [...sorted.slice(i + 1), ...sorted.slice(0, i)]
+    return i < 0 ? sorted : [...sorted.slice(i), ...sorted.slice(0, i)]
   })()
-  const challenger = pub.phase === 'awaiting_challenge' && pub.pending_challenger === meId
+  // Exactly one pile glows: whoever the server is waiting on.
+  const turnOwner = pub.phase === 'ended' ? null : pub.phase === 'awaiting_challenge' ? (pub.pending_challenger ?? null) : pub.current_player
+  const challenger = pub.phase === 'awaiting_challenge' && pub.pending_challenger === meId && !locked
   const canDraw = myTurn && !m.you.drewThisTurn
   const canPass = myTurn && m.you.drewThisTurn
+  // UNO is only for the one-card moment; the server refuses two cards as well.
+  const canUno = m.you.canCallUno && m.hand.length === 1 && !locked
+  const canCatch = m.you.canCatchUno !== null && !locked
   const catchName = m.you.canCatchUno !== null ? nameOf(m.you.canCatchUno) : ''
 
   function play(k: KeyedCard, el: HTMLElement) {
@@ -249,8 +268,8 @@ export default function TablePage() {
     const k = e.key.toLowerCase()
     if (k === 'd' && canDraw) sendAction('draw')
     else if (k === 'p' && canPass) sendAction('pass')
-    else if (k === 'u' && m.you.canCallUno) sendAction('call_uno')
-    else if (k === 'c' && m.you.canCatchUno !== null) sendAction('catch_uno')
+    else if (k === 'u' && canUno) sendAction('call_uno')
+    else if (k === 'c' && canCatch) sendAction('catch_uno')
     else return
     e.preventDefault()
   }
@@ -258,7 +277,7 @@ export default function TablePage() {
   const discardLayoutId = playKey && m.announce?.kind === 'play' && m.announce.playerId === meId ? `card-${playKey}` : undefined
 
   return (
-    <section className="table" ref={tableRef} tabIndex={-1} onKeyDown={onKeyDown} aria-label={t('table.region')} data-count={others.length}>
+    <section className="table" ref={tableRef} tabIndex={-1} onKeyDown={onKeyDown} aria-label={t('table.region')}>
       <Floor color={pub.active_color} origin={floorAt} />
 
       <header className="tstrip">
@@ -271,38 +290,29 @@ export default function TablePage() {
         <span className="tstrip__dir" title={t('table.direction')}>
           {pub.direction === 1 ? <RotateCw size={18} strokeWidth={2.5} aria-label={t('table.clockwise')} /> : <RotateCcw size={18} strokeWidth={2.5} aria-label={t('table.counter')} />}
         </span>
-        {pub.phase !== 'ended' && <Timer deadline={pub.turn_deadline} offsetMs={m.timerOffsetMs} mine={myTurn || challenger} />}
+        {pub.phase !== 'ended' && <Timer deadline={pub.turn_deadline} offsetMs={m.timerOffsetMs} mine={yourTurn || challenger} />}
       </header>
 
-      <ul className="tseats" aria-label={t('table.opponents')}>
-        {others.map((p) => (
-          <SeatChip
-            key={p.user_id}
-            p={p}
-            name={nameOf(p.user_id)}
-            current={p.user_id === pub.current_player && pub.phase !== 'ended'}
-            innerRef={(el) => {
-              if (el) seatEls.current.set(p.user_id, el)
-              else seatEls.current.delete(p.user_id)
-            }}
-          />
-        ))}
-      </ul>
-
-      <div className="stage">
-        <p className="stage__turn" aria-live="polite">
-          {pub.phase === 'awaiting_challenge'
-            ? t('table.awaitChallenge', { name: nameOf(pub.pending_challenger) })
-            : myTurn
-              ? m.you.drewThisTurn
-                ? t('table.yourTurnDrew')
-                : t('table.yourTurn')
-              : current
-                ? t('table.theirTurn', { name: nameOf(current.user_id) })
-                : ''}
-        </p>
-        <div className="stage__piles">
+      <div className="ring-wrap">
+        <div className="ring" data-count={seats.length}>
+          <span className="ring__table" aria-hidden />
+          <ul className="seats" aria-label={t('table.players')}>
+            {seats.map((p, i) => (
+              <Seat
+                key={p.user_id}
+                p={p}
+                name={nameOf(p.user_id)}
+                turn={p.user_id === turnOwner}
+                angle={90 + (360 * i) / seats.length}
+                pileRef={(el) => {
+                  if (el) seatEls.current.set(p.user_id, el)
+                  else seatEls.current.delete(p.user_id)
+                }}
+              />
+            ))}
+          </ul>
           <button
+            ref={drawRef}
             type="button"
             className={`drawpile ${canDraw ? 'drawpile--live' : ''}`}
             onClick={() => canDraw && sendAction('draw')}
@@ -331,23 +341,22 @@ export default function TablePage() {
             playId={m.announce?.kind === 'play' ? m.announce.id : 0}
             layoutId={discardLayoutId}
             from={from}
+            hidden={m.flights.some((f) => f.to === 'discard')}
           />
         </div>
-        <AnimatePresence>
-          {announcement && (
-            <motion.p
-              key={announcement.id}
-              className={`bubble ${announcement.loud ? 'bubble--loud' : ''}`}
-              initial={reduce ? { opacity: 0 } : { opacity: 0, scale: 0.6, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              transition={reduce ? { duration: 0.12 } : { type: 'spring', stiffness: 600, damping: 18 }}
-              aria-hidden
-            >
-              {announcement.text}
-            </motion.p>
-          )}
-        </AnimatePresence>
+        {/* On screen the glowing pile and the cards say whose turn it is and what
+            just happened; these lines say it to screen readers. */}
+        <p className="sr-only" aria-live="polite">
+          {pub.phase === 'awaiting_challenge'
+            ? t('table.awaitChallenge', { name: nameOf(pub.pending_challenger) })
+            : yourTurn
+              ? m.you.drewThisTurn
+                ? t('table.yourTurnDrew')
+                : t('table.yourTurn')
+              : current
+                ? t('table.theirTurn', { name: nameOf(current.user_id) })
+                : ''}
+        </p>
         <p className="sr-only" aria-live="polite">
           {announcement?.text ?? ''}
         </p>
@@ -355,19 +364,15 @@ export default function TablePage() {
 
       <div className="tactions">
         <p className="sr-only" aria-live="assertive">
-          {m.you.canCallUno ? t('table.unoNow') : m.you.canCatchUno !== null ? t('table.catchNow', { name: catchName }) : ''}
+          {canUno ? t('table.unoNow') : canCatch ? t('table.catchNow', { name: catchName }) : ''}
         </p>
-        <span className="tactions__me">
-          {t('table.youHave', { count: m.hand.length })}
-          {meSeat?.uno_called && m.hand.length === 1 && <span className="stamp stamp--alert">UNO!</span>}
-        </span>
         <AnimatePresence mode="popLayout">
-          {m.you.canCallUno && (
+          {canUno && (
             <ActionButton key="uno" className="btn--uno" onClick={() => sendAction('call_uno')} hotkey="U">
               UNO!
             </ActionButton>
           )}
-          {m.you.canCatchUno !== null && (
+          {canCatch && (
             <ActionButton key="catch" className="btn--catch" onClick={() => sendAction('catch_uno')} hotkey="C">
               {t('table.catch', { name: catchName })}
             </ActionButton>
@@ -386,6 +391,12 @@ export default function TablePage() {
       </div>
 
       <Hand ref={handRef} cards={cards} isPlayable={isPlayable} pendingKey={pendingKey} onPlay={play} />
+
+      <DrawFlights
+        flights={m.flights}
+        from={() => drawRef.current}
+        to={(f) => (f.to === 'discard' ? discardRef.current : (seatEls.current.get(f.to) ?? null))}
+      />
 
       <AnimatePresence>
         {wildFor && (

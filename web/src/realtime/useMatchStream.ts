@@ -75,11 +75,11 @@ function onFrame(f: ServerFrame) {
         .catch(() => {})
       return
     case 'action': {
-      const before = match.hand.length
       match.applyEvent(f)
       const d = f.data
       if (d.action === 'play') sound('play')
-      else if (d.cards && useMatch.getState().hand.length > before) sound('draw')
+      // My private draw frame: the cards join the hand as they land, not now.
+      else if (d.cards?.length) sound('draw')
       return
     }
     default:

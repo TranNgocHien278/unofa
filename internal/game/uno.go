@@ -9,7 +9,9 @@ import "time"
 // stays open until the next player acts, the match ends, or a challenge/accept is
 // decided (D13).
 
-// canCallUno reports whether userID may press UNO right now.
+// canCallUno reports whether userID may press UNO right now: only with exactly
+// one card left, right after playing down to it, while their catch window is
+// still open. Holding two cards never qualifies, not even on their own turn.
 func (s *State) canCallUno(userID int64) bool {
 	idx := s.findPlayerIdx(userID)
 	if idx < 0 {
@@ -19,18 +21,7 @@ func (s *State) canCallUno(userID int64) bool {
 	if p.Status == Forfeit || p.UnoCalled {
 		return false
 	}
-	if len(p.Hand) == 0 {
-		return false
-	}
-	// Either it is their turn with exactly two cards and something playable,
-	// or they just played down to one card without calling.
-	if len(p.Hand) == 2 && s.phase == Playing && s.current == idx {
-		return anyPlayable(p.Hand, s.topDiscard(), s.activeColor)
-	}
-	if len(p.Hand) == 1 && s.unoWindowVictim != nil && *s.unoWindowVictim == userID {
-		return true
-	}
-	return false
+	return len(p.Hand) == 1 && s.unoWindowVictim != nil && *s.unoWindowVictim == userID
 }
 
 // canCatchUno returns the victim id a viewer may catch, or nil. It is a per-viewer

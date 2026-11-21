@@ -464,9 +464,7 @@ Thách thức `+4` (theo file luật):
 Nút `UNO`:
 
 - Nút chỉ **hiện ra** khi bấm được. Không hiện thì không render, không phải render rồi `disabled`.
-- Nút `UNO` hiện cho người chơi khi:
-  - Đang là lượt của họ, tay còn 2 lá, và có ít nhất 1 lá đánh được. Bấm trước rồi đánh.
-  - Hoặc vừa đánh xuống còn 1 lá mà chưa bấm, cho tới khi người kế tiếp hành động.
+- Nút `UNO` hiện cho người chơi chỉ khi vừa đánh xuống còn đúng 1 lá mà chưa bấm, cho tới khi người kế tiếp hành động. Còn 2 lá thì không hiện, server cũng từ chối `call_uno`.
 - Nút `Bắt UNO` hiện cho **mọi người khác** khi có người còn 1 lá mà chưa bấm `UNO`. Nút biến mất khi lượt đi qua người kế tiếp: họ đánh, rút, hết giờ, hoặc bị `Skip`/`+2`/`+4` bỏ lượt (lúc đó nút biến mất khi bắt đầu lượt của người sau họ).
   - Người bắt đầu tiên thắng. Server xử lý theo thứ tự request đến, chỉ phạt một lần.
   - Bị bắt: rút 2 lá.

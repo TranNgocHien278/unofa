@@ -130,11 +130,10 @@ new Socket({ url: '/api/ws', onEvent, onOpen, onClose })
 ┌──────────────────────────────────────────┐
 │ Room code · Pot 200U · [timer 00:14]     │
 ├──────────────────────────────────────────┤
-│        [đối thủ trái]   [đối thủ phải]   │
-│  (avatar, số lá, status)  (…)            │
-│                                          │
-│        [Cọc Rút]  [Cọc Bỏ: top card]     │
-│                                          │
+│                  Quân                    │
+│       Linh  [Rút][Cọc Bỏ]  Thảo          │
+│                  Bạn                     │
+│        (bàn gỗ tròn, to hết chỗ)         │
 ├──────────────────────────────────────────┤
 │  [UNO] [Bắt UNO]        [Rút] [Pass]     │
 ├──────────────────────────────────────────┤
@@ -142,7 +141,11 @@ new Socket({ url: '/api/ws', onEvent, onOpen, onClose })
 └──────────────────────────────────────────┘
 ```
 
-- Bàn tối đa `10` ghế: hiện danh sách ghế hai bên + trên, không dùng toạ độ vòng tròn với CSS transform (dễ vỡ khi 3 người). Dùng grid theo số người, `data-count` để chọn layout.
+- Bàn tròn, tối đa `10` ghế: mỗi người là một cọc bài úp, chia đều quanh vòng (góc `360°/N`, mình ở đáy, theo thứ tự ghế). Tên nằm trên cọc, số lá ở giữa cọc. Toạ độ là biến CSS `--x`/`--y` (cos/sin) nhân bán kính tính bằng container query (`cqmin`), không đo bằng JS. `data-count` trên `.ring` chọn cỡ cọc theo số người.
+- Cọc của người server đang chờ phát sáng nhịp chậm, lặp: `pending_challenger` khi `awaiting_challenge`, còn lại `current_player`. Luôn đúng một cọc sáng; ván xong thì không cọc nào.
+- Bàn to hết vùng giữa thanh trên và hàng nút: mặt gỗ nâu (`--wood`, viền `--wood-rim`), vân gỗ là SVG `feTurbulence` ngay trong CSS, viền mực. Mặt bàn trùm tới mép ngoài các cọc ghế.
+- Cọc Bỏ ở tâm bàn. Cọc Rút nằm trên bàn, sát bên trái Cọc Bỏ, vùng bấm không dưới `44px`, số lá ghi dưới cọc. Không đè ghế hay tên từ `2` tới `10` người, màn rộng từ `360px`.
+- Không có dòng chữ lượt hay bong bóng hành động trên màn: cọc sáng cho biết lượt. Hai đoạn `sr-only` `aria-live` đọc lượt và hành động cuối cho screen reader.
 - Mobile: tay bài cuộn ngang, mỗi lá `min-width: 64px`.
 
 ### Component lá bài
@@ -182,7 +185,7 @@ Không dùng `<div role="button">` khi `<button>` được.
 |---|---|
 | `Rút` | `isYourTurn && !drewThisTurn` |
 | `Pass` | `isYourTurn && drewThisTurn` |
-| `UNO` | `canCallUno` |
+| `UNO` | `canCallUno` và tay còn đúng `1` lá |
 | `Bắt UNO` | `canCatchUno !== null` |
 | Dialog thách thức | `phase === 'awaiting_challenge' && you là pending_challenger` |
 
@@ -216,6 +219,14 @@ Nút **không hiện** thì không render — không render rồi `disabled` (v3
 Framer Motion. `layout` cho tay bài, `AnimatePresence` cho lá ra/vào.
 
 `useReducedMotion()` → fade ngắn `120ms`, không bay lá, không scale.
+
+Lá rút bay (`DrawFlights`, Web Animations API):
+
+- Mỗi lá bay từ Cọc Rút tới cọc người rút (mình hoặc bot), theo toạ độ thật của hai phần tử (`getBoundingClientRect`). Mỗi lá `400ms`, lá sau trễ `150ms`.
+- Số lá trên cọc đích, số lá Cọc Rút và lá vào tay mình chỉ đổi khi lá chạm tới.
+- Còn lá đang bay thì khoá input. Frame tới sau (`action`, `state`) xếp hàng trong store, chạy theo thứ tự sau lá cuối, nên glow chỉ chuyển người khi lá cuối chạm đích. Server không dừng: đây là hold phía client.
+- Lá đầu ván (`match_start`) bay ngửa từ Cọc Rút ra Cọc Bỏ; Cọc Bỏ ẩn tới khi lá chạm.
+- Reduced motion: mỗi lá fade `120ms` tại cọc đích, không bay. Tab ẩn: lá hạ cánh ngay.
 
 ## Phòng chờ (`/room/:code`)
 

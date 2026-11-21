@@ -14,6 +14,8 @@ interface Props {
   from?: { x: number; y: number } | null
   seq: number
   playId: number
+  // The round's first card is still flying here from the draw pile.
+  hidden?: boolean
 }
 
 interface Laid {
@@ -27,7 +29,7 @@ interface Laid {
 // A small deterministic tilt per card makes the pile look tossed, not stacked.
 const tilt = (n: number) => ((n * 37) % 17) - 8
 
-export const Discard = forwardRef<HTMLDivElement, Props>(function Discard({ top, activeColor, layoutId, from, seq, playId }, ref) {
+export const Discard = forwardRef<HTMLDivElement, Props>(function Discard({ top, activeColor, layoutId, from, seq, playId, hidden }, ref) {
   const { t } = useTranslation()
   const reduce = useReducedMotion()
   // A new play is either a new play id or a different top card (snapshot after a gap).
@@ -42,7 +44,7 @@ export const Discard = forwardRef<HTMLDivElement, Props>(function Discard({ top,
 
   const wild = top.color === 'NONE'
   return (
-    <div className="discard" ref={ref}>
+    <div className={`discard ${hidden ? 'discard--waiting' : ''}`} ref={ref}>
       <span className="ground-shadow ground-shadow--pile" aria-hidden />
       {pile.map((l, i) => {
         const isTop = i === pile.length - 1

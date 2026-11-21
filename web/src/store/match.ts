@@ -28,6 +28,19 @@ interface You {
   drewThisTurn: boolean
 }
 
+// A card in the air from the draw pile to a player's pile, or to the discard for
+// the round's first card. The store owns the clock: a pile count goes up only when
+// its card lands, and while any card is up the table is locked and later frames
+// wait in `held`, so the next turn never starts before the last card lands.
+export interface Flight {
+  id: number
+  to: number | 'discard'
+  card?: Card
+  at: number // performance.now() when the batch left the pile
+  delay: number
+  dur: number
+}
+
 interface MatchState {
   matchId: string | null
   meId: number
@@ -45,9 +58,13 @@ interface MatchState {
   lastDrawn: Card[]
   announce: Announce | null
   end: MatchEnd | null
+  // Cards in the air; non-empty means the table is locked.
+  flights: Flight[]
+  // My drawn cards still in the air: each joins the hand as it lands.
+  incoming: Card[]
   setMatch(id: string | null, meId?: number): void
-  applySnapshot(v: MatchView): void
-  applyEvent(e: EventFrame): void
+  applySnapshot(v: MatchView, receivedAt?: number): void
+  applyEvent(e: EventFrame, receivedAt?: number): void
   setPending(ref: string, card: Card): void
   rollback(ref: string): boolean
   reset(): void
@@ -65,7 +82,45 @@ function removeOne(hand: Card[], card: Card): Card[] {
   return i < 0 ? hand : [...hand.slice(0, i), ...hand.slice(i + 1)]
 }
 
-const offsetOf = (serverNow?: string) => (serverNow ? Date.parse(serverNow) - Date.now() : null)
+// receivedAt keeps the offset honest for a frame that waited behind a flight.
+const offsetOf = (serverNow?: string, receivedAt = Date.now()) => (serverNow ? Date.parse(serverNow) - receivedAt : null)
+
+// Each card flies ~400ms and the next leaves 150ms later. Reduced motion keeps the
+// rhythm but only fades the card in at its pile, in the spec's short 120ms fade.
+const FLY = { dur: 400, gap: 150 }
+const FADE = { dur: 120, gap: 150 }
+const reducedMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches
+
+// Who takes cards from the draw pile in an action event, and how many. My own
+// count comes from my private frame instead (`incoming`).
+function drawsFor(d: ActionData): [number | undefined, number] {
+  switch (d.action) {
+    case 'draw':
+      return [d.player_id, 1]
+    case 'timeout':
+      return [d.player_id, d.drew ? 1 : 0]
+    case 'draw2_penalty':
+      return [d.player_id, 2]
+    case 'accept':
+      return [d.player_id, 4]
+    case 'challenge':
+      return d.result === 'success' ? [d.target_player_id, 4] : [d.player_id, 6]
+    case 'catch_uno':
+      return [d.target_player_id, d.result === 'success' ? 2 : 0]
+    default:
+      return [undefined, 0]
+  }
+}
+
+let nextFlight = 1
+let held: { e: EventFrame; at: number }[] = []
+let timers: ReturnType<typeof setTimeout>[] = []
+
+function clearFlights() {
+  timers.forEach(clearTimeout)
+  timers = []
+  held = []
+}
 
 const initial = {
   matchId: null,
@@ -80,6 +135,8 @@ const initial = {
   lastDrawn: [] as Card[],
   announce: null,
   end: null,
+  flights: [] as Flight[],
+  incoming: [] as Card[],
 }
 
 export const useMatch = create<MatchState>((set, get) => {
@@ -91,6 +148,45 @@ export const useMatch = create<MatchState>((set, get) => {
     matchState(id)
       .then((v) => get().applySnapshot(v))
       .catch(() => {})
+  }
+
+  // land puts one card on its pile: only now does that count go up.
+  function land(to: number | 'discard', id?: number) {
+    const s = get()
+    const patch: Partial<MatchState> = {}
+    if (id !== undefined) patch.flights = s.flights.filter((f) => f.id !== id)
+    if (to !== 'discard' && s.public) {
+      const pub = s.public
+      patch.public = {
+        ...pub,
+        draw_pile_count: Math.max(0, pub.draw_pile_count - 1),
+        players: pub.players.map((p) => (p.user_id === to ? { ...p, hand_count: p.hand_count + 1 } : p)),
+      }
+      if (to === s.meId && s.incoming.length) {
+        patch.hand = [...s.hand, s.incoming[0]]
+        patch.incoming = s.incoming.slice(1)
+      }
+    }
+    set(patch)
+    // The last card is down: play out what arrived meanwhile, in order.
+    while (held.length && !get().flights.length) {
+      const h = held.shift()!
+      get().applyEvent(h.e, h.at)
+    }
+  }
+
+  function fly(to: number | 'discard', n: number, card?: Card) {
+    if (n <= 0) return
+    // A hidden tab throttles timers, so land at once rather than stall the table.
+    if (typeof document !== 'undefined' && document.hidden) {
+      for (let i = 0; i < n; i++) land(to)
+      return
+    }
+    const { dur, gap } = reducedMotion() ? FADE : FLY
+    const at = performance.now()
+    const batch = Array.from({ length: n }, (_, i) => ({ id: nextFlight++, to, card, at, delay: i * gap, dur }))
+    set({ flights: [...get().flights, ...batch] })
+    for (const f of batch) timers.push(setTimeout(() => land(f.to, f.id), f.delay + f.dur))
   }
 
   function applyAction(d: ActionData) {
@@ -127,6 +223,8 @@ export const useMatch = create<MatchState>((set, get) => {
       set({ you: { ...s.you, drewThisTurn: true } })
     }
     set({ announce })
+    const [to, n] = drawsFor(d)
+    if (to !== undefined) fly(to, to === s.meId ? s.incoming.length : n)
   }
 
   return {
@@ -137,12 +235,17 @@ export const useMatch = create<MatchState>((set, get) => {
         if (meId) set({ meId })
         return
       }
+      clearFlights()
       set({ ...initial, matchId: id, meId: meId ?? get().meId })
     },
 
-    applySnapshot(v) {
+    applySnapshot(v, receivedAt = Date.now()) {
       const s = get()
       if (s.matchId && v.match_id !== s.matchId) return
+      if (s.flights.length) {
+        held.push({ e: { name: 'state', data: v }, at: receivedAt })
+        return
+      }
       if (v.seq < s.seq) return
       const pending = s.pendingAction && v.seq > s.pendingAction.seq ? null : s.pendingAction
       set({
@@ -158,28 +261,38 @@ export const useMatch = create<MatchState>((set, get) => {
           isYourTurn: v.you.is_your_turn,
           drewThisTurn: Boolean(v.you.drew_this_turn),
         },
-        timerOffsetMs: offsetOf(v.server_now) ?? s.timerOffsetMs,
+        timerOffsetMs: offsetOf(v.server_now, receivedAt) ?? s.timerOffsetMs,
         pendingAction: pending,
         lastDrawn: v.you.is_your_turn ? s.lastDrawn : [],
+        incoming: [],
       })
     },
 
     // applyEvent follows 06 §Store: drop duplicates, refetch on a gap, apply in order.
-    applyEvent(e) {
+    // Frames that arrive while cards are in the air wait for the last one to land.
+    applyEvent(e, receivedAt = Date.now()) {
+      if (get().flights.length) {
+        held.push({ e, at: receivedAt })
+        return
+      }
       const s = get()
-      const offset = offsetOf(e.server_now)
+      const offset = offsetOf(e.server_now, receivedAt)
       if (offset !== null) set({ timerOffsetMs: offset })
       if (e.name === 'state' || e.name === 'match_start') {
-        get().applySnapshot(e.data as MatchView)
+        get().applySnapshot(e.data as MatchView, receivedAt)
+        // The round's first card goes from the draw pile to the table.
+        const top = get().public?.top_card
+        if (e.name === 'match_start' && top) fly('discard', 1, top)
         return
       }
       if (e.seq === undefined) return
       const d = e.data as ActionData
 
       // The drawer's private frame shares its seq with the public frame that
-      // follows it, and carries only the drawn cards.
+      // follows it, and carries only the drawn cards. They join the hand as they
+      // land, once the public frame has sent them flying.
       if (e.name === 'action' && d.cards && !d.action) {
-        if (e.seq === s.seq + 1) set({ hand: [...s.hand, ...d.cards], lastDrawn: d.cards })
+        if (e.seq === s.seq + 1) set({ incoming: d.cards, lastDrawn: d.cards })
         return
       }
       if (e.seq <= s.seq) return
@@ -219,6 +332,9 @@ export const useMatch = create<MatchState>((set, get) => {
       return true
     },
 
-    reset: () => set({ ...initial }),
+    reset: () => {
+      clearFlights()
+      set({ ...initial })
+    },
   }
 })

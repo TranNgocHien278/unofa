@@ -21,16 +21,6 @@ func playable(c Card, top Card, activeColor Color) bool {
 	return false
 }
 
-// anyPlayable reports whether the hand holds at least one legal card.
-func anyPlayable(hand []Card, top Card, activeColor Color) bool {
-	for _, c := range hand {
-		if playable(c, top, activeColor) {
-			return true
-		}
-	}
-	return false
-}
-
 // handHasColor reports whether the hand holds any card of the given color.
 // Wild cards have color NONE and never match.
 func handHasColor(hand []Card, color Color) bool {

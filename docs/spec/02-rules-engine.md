@@ -158,12 +158,9 @@ Thắng **chưa xác nhận**. `match_end` và `PAYOUT` chưa chạy.
 
 ### `can_call_uno`
 
-`true` khi và chỉ khi:
+`true` khi và chỉ khi người đó vừa đánh xuống còn **đúng 1 lá** mà chưa gọi, và cửa sổ bắt vẫn mở.
 
-- Đang là lượt của người đó, tay còn **đúng 2 lá**, và có ít nhất `1` lá đánh được; **hoặc**
-- Người đó vừa đánh xuống còn `1` lá mà chưa gọi, và cửa sổ bắt vẫn mở.
-
-Ngoài hai trường hợp trên: `false`, nút không render.
+Còn `2` lá thì luôn `false`, kể cả đang là lượt của người đó: nút không render, `call_uno` bị từ chối (`CANNOT_CALL_UNO`).
 
 ### `can_catch_uno`
 
@@ -347,7 +344,7 @@ Mỗi dòng là một test case, không phải gợi ý.
 | R14 | Hết `20s` khi chờ thách thức = `accept`, không phạt thêm `1`. |
 | R15 | `WILD4` là lá cuối + `accept`: người đánh thắng, không ai rút `4`. |
 | R16 | `WILD4` là lá cuối + `challenge` đúng: không ai thắng, ván tiếp tục. |
-| R17 | `call_uno` khi còn `2` lá và có lá đánh được: hợp lệ. |
+| R17 | `call_uno` khi còn `2` lá: `CANNOT_CALL_UNO`. Vừa đánh xuống còn `1` lá: hợp lệ. |
 | R18 | Bắt UNO hết hạn khi người kế tiếp hành động → `UNO_WINDOW_CLOSED`. |
 | R19 | `catch_uno` hai lần: chỉ phạt một lần, lần hai `UNO_ALREADY_CALLED`. |
 | R20 | `uno_called` xoá khi tay bài lên lại trên `1`. |

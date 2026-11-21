@@ -1,11 +1,13 @@
-/* Table layout, rows top to bottom: strip | seats | stage | actions | hand.
-   Thumb reach: actions and hand sit in the bottom third on phones. */
+/* Table layout, rows top to bottom: strip | round table | actions | hand.
+   The round table takes all the free height; the draw pile lies on it, just
+   left of the discard. Thumb reach: actions and hand sit in the bottom third
+   on phones. */
 .table {
   position: relative;
   isolation: isolate;
   min-height: 100dvh;
   display: grid;
-  grid-template-rows: auto auto 1fr auto auto;
+  grid-template-rows: auto 1fr auto auto;
   overflow: hidden;
   background: var(--floor-none);
 }
@@ -120,107 +122,199 @@
   }
 }
 
-/* ---------- opponents ---------- */
+/* ---------- the round table: as big as the free space allows ---------- */
 
-.tseats {
+.ring-wrap {
+  container-type: size;
+  display: grid;
+  place-items: center;
+  min-height: 260px;
+  padding: 4px;
+}
+/* Seats sit on a circle of radius --r on the table rim. The centre drops by half
+   a name tag so the top seat's name stays inside the square too. */
+.ring {
+  --pile-w: clamp(30px, 13cqmin, 64px);
+  --tag: 26px;
+  --r: calc(50% - var(--pile-w) * 0.75 - var(--tag) / 2);
+  --cy: calc(50% + var(--tag) / 2);
+  /* The discard keeps clear of my name tag, which sits above my pile. */
+  --discard-w: clamp(36px, min(17cqmin, (50cqmin - 1.5 * var(--pile-w) - 45px) * 4 / 3), 104px);
+  /* The draw pile lies just left of the discard; the discard keeps the centre.
+     The gap clears the discard's tilt (up to 8deg). */
+  --draw-w: max(44px, var(--discard-w) * 0.72);
+  --pile-gap: max(8px, var(--discard-w) * 0.12);
+  --count: min(30px, var(--pile-w) * 0.8);
+  position: relative;
+  width: 100cqmin;
+  aspect-ratio: 1;
+}
+.ring[data-count='5'],
+.ring[data-count='6'] {
+  --pile-w: clamp(28px, 11cqmin, 56px);
+}
+.ring[data-count='7'],
+.ring[data-count='8'],
+.ring[data-count='9'],
+.ring[data-count='10'] {
+  --pile-w: clamp(26px, 8.5cqmin, 46px);
+}
+/* The table top: wood with cel-shaded grain and an ink rim like every object
+   here. It reaches the outer edge of the seat piles, so every pile lies on it.
+   The grain is contour lines of stretched noise, drawn as a dark translucent
+   overlay, so it follows --wood. */
+.ring__table {
+  position: absolute;
+  left: 50%;
+  top: var(--cy);
+  width: calc(2 * var(--r) + 1.5 * var(--pile-w));
+  aspect-ratio: 1;
+  translate: -50% -50%;
+  border: var(--stroke) solid var(--ink);
+  border-radius: 50%;
+  background:
+    url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 300' preserveAspectRatio='none'><filter id='g' x='0' y='0' width='1' height='1' color-interpolation-filters='sRGB'><feTurbulence type='fractalNoise' baseFrequency='.004 .08' numOctaves='2' seed='7'/><feColorMatrix values='0 0 0 0 .3 0 0 0 0 .15 0 0 0 0 .05 1 0 0 0 0'/><feComponentTransfer><feFuncA type='discrete' tableValues='0 0 0 0 0 0 0 0 0 0 0 0 .45 0 0 0 .45 0 0 0 .45 0 0 0 .45 0 0 0 .45 0 0 0 .45 0 0 0 .45 0 0 0 0 0 0 0 0 0 0 0'/></feComponentTransfer></filter><rect width='300' height='300' filter='url(%23g)'/></svg>")
+      center / cover,
+    var(--wood);
+  box-shadow:
+    inset 0 0 0 calc(var(--pile-w) * 0.14) var(--wood-rim),
+    0 8px 0 var(--shadow-ground);
+}
+
+.seats {
   list-style: none;
   margin: 0;
-  padding: 14px var(--gutter) 8px;
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  scrollbar-width: none;
+  padding: 0;
 }
-.tseats > :first-child {
-  margin-left: auto;
+.seat {
+  position: absolute;
+  left: calc(50% + var(--x) * var(--r));
+  top: calc(var(--cy) + var(--y) * var(--r));
+  width: var(--pile-w);
+  aspect-ratio: 2 / 3;
+  translate: -50% -50%;
 }
-.tseats > :last-child {
-  margin-right: auto;
+.seat--out {
+  opacity: 0.6;
 }
-.tseat {
+.seat__name {
+  position: absolute;
+  z-index: 2;
+  bottom: calc(100% + 4px);
+  left: 50%;
+  translate: -50% 0;
+  max-width: calc(var(--pile-w) + 48px);
+  padding: 0 8px;
+  border: 2px solid var(--ink);
+  border-radius: 999px;
+  background: var(--paper);
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* Five or six seats put a pile on each side of the draw pile: a long name on the
+   lower-left seat stops short of it. */
+.ring[data-count='5'] .seat__name,
+.ring[data-count='6'] .seat__name {
+  max-width: calc(var(--pile-w) + 24px);
+}
+.ring[data-count='7'] .seat__name,
+.ring[data-count='8'] .seat__name,
+.ring[data-count='9'] .seat__name,
+.ring[data-count='10'] .seat__name {
+  max-width: calc(var(--pile-w) + 20px);
+  font-size: 12px;
+}
+.seat--turn .seat__name {
+  background: var(--sun);
+}
+.seat__pile {
   position: relative;
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 14px 5px 5px;
+  display: block;
+  height: 100%;
+}
+.seat__card {
+  position: absolute;
+  inset: 0;
+}
+.seat__card--under {
+  translate: 3px 3px;
+}
+/* The pile whose move it is glows: a soft sun halo breathing behind the cards. */
+.seat__pile::before {
+  content: '';
+  position: absolute;
+  inset: -7px;
+  border-radius: 14px;
+  background: var(--sun);
+  box-shadow: 0 0 18px 6px var(--sun);
+  opacity: 0;
+  transition: opacity 200ms var(--ease-out);
+}
+.seat--turn .seat__pile::before {
+  opacity: 1;
+  animation: glow 1.4s ease-in-out infinite alternate;
+}
+@keyframes glow {
+  from {
+    opacity: 0.5;
+    scale: 0.94;
+  }
+  to {
+    opacity: 1;
+    scale: 1.06;
+  }
+}
+.seat__count {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  min-width: var(--count);
+  height: var(--count);
+  padding: 0 4px;
+  display: grid;
+  place-items: center;
   border: var(--stroke) solid var(--ink);
   border-radius: 999px;
   background: var(--paper);
-  transition: transform 220ms var(--ease-out);
-}
-.tseat .avatar {
-  width: 38px;
-  height: 38px;
-  font-size: 17px;
-}
-.tseat--turn {
-  background: var(--sun);
-  transform: translateY(-3px);
-}
-.tseat--out {
-  border-style: dashed;
-  opacity: 0.6;
-}
-.tseat__body {
-  display: grid;
-  line-height: 1.2;
-}
-.tseat__name {
-  max-width: 11ch;
   font-weight: 700;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: calc(var(--count) / 2);
 }
-.tseat__count {
-  font-size: 13px;
-}
-.tseat__stamp {
+.seat__stamp {
   position: absolute;
-  top: -12px;
-  right: -4px;
+  z-index: 2;
+  bottom: -10px;
+  left: 50%;
+  translate: -50% 0;
   font-size: 12px;
   padding: 0 6px;
   background: var(--paper);
+  white-space: nowrap;
 }
 
-/* ---------- stage ---------- */
-
-.stage {
-  display: grid;
-  align-content: center;
-  justify-items: center;
-  gap: 18px;
-  padding: 8px var(--gutter);
-  min-height: 0;
-}
-.stage__turn {
-  margin: 0;
-  min-height: 1.4em;
-  font-family: var(--font-display);
-  font-size: clamp(18px, 5vw, 24px);
-  text-align: center;
-  text-wrap: balance;
-}
-.stage__piles {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: clamp(28px, 9vw, 64px);
-}
-
-.drawpile,
-.discard {
-  position: relative;
-  width: clamp(92px, 27vw, 136px);
-  aspect-ratio: 2 / 3;
-}
 .drawpile {
+  position: absolute;
+  left: calc(50% - var(--discard-w) / 2 - var(--pile-gap) - var(--draw-w));
+  top: calc(var(--cy) - var(--draw-w) * 0.75);
+  width: var(--draw-w);
+  aspect-ratio: 2 / 3;
   padding: 0;
   border: 0;
   background: none;
   cursor: default;
+}
+.discard {
+  position: absolute;
+  left: 50%;
+  top: var(--cy);
+  width: var(--discard-w);
+  aspect-ratio: 2 / 3;
+  translate: -50% -50%;
 }
 .drawpile--live {
   cursor: pointer;
@@ -231,23 +325,23 @@
   transition: transform 200ms var(--ease-out);
 }
 .drawpile__card--2 {
-  transform: translate(4px, 4px);
+  transform: translate(2px, 2px);
 }
 .drawpile__card--3 {
-  transform: translate(8px, 8px);
+  transform: translate(4px, 4px);
 }
 .drawpile--live .drawpile__card:last-of-type {
   animation: nudge 2.4s var(--ease-out) infinite;
 }
 .drawpile--live:hover .drawpile__card:last-of-type,
 .drawpile--live:focus-visible .drawpile__card:last-of-type {
-  transform: translate(-3px, -10px) rotate(-4deg);
+  transform: translate(-2px, -7px) rotate(-4deg);
   animation: none;
 }
 .drawpile:focus-visible {
   outline: 3px solid var(--focus);
-  outline-offset: 10px;
-  border-radius: 12px;
+  outline-offset: 6px;
+  border-radius: 10px;
 }
 @keyframes nudge {
   0%,
@@ -262,26 +356,48 @@
     transform: translateY(0) scale(1.04, 0.96);
   }
 }
+/* Under the pile, not at its corner: the discard sits right beside it. */
 .drawpile__count {
   position: absolute;
   z-index: 2;
-  right: -10px;
-  bottom: -10px;
-  min-width: 34px;
-  height: 34px;
-  padding: 0 6px;
+  left: 50%;
+  bottom: -12px;
+  translate: -50% 0;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 5px;
   display: grid;
   place-items: center;
   border: var(--stroke) solid var(--ink);
   border-radius: 999px;
   background: var(--paper);
   font-weight: 700;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .discard__card {
   position: absolute;
   inset: 0;
+}
+/* visibility, not opacity: framer-motion writes opacity inline on the card. */
+.discard--waiting .discard__card,
+.discard--waiting .discard__chosen {
+  visibility: hidden;
+}
+
+/* ---------- cards in the air (draws, and the round's first card) ---------- */
+
+.table > .flights {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  max-width: none;
+  margin: 0;
+  pointer-events: none;
+}
+.flight {
+  position: absolute;
+  will-change: transform;
 }
 .ground-shadow--pile {
   bottom: -12px;
@@ -302,43 +418,6 @@
   border-radius: 50%;
 }
 
-.bubble {
-  position: absolute;
-  top: 6px;
-  left: 50%;
-  translate: -50% 0;
-  z-index: 6;
-  margin: 0;
-  max-width: min(86vw, 420px);
-  padding: 8px 16px;
-  border: var(--stroke) solid var(--ink);
-  border-radius: 18px;
-  background: var(--paper);
-  font-weight: 700;
-  text-align: center;
-  text-wrap: balance;
-  pointer-events: none;
-}
-.bubble::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  bottom: -11px;
-  width: 16px;
-  height: 16px;
-  translate: -50% 0;
-  rotate: 45deg;
-  background: inherit;
-  border-right: var(--stroke) solid var(--ink);
-  border-bottom: var(--stroke) solid var(--ink);
-}
-.bubble--loud {
-  background: var(--sun);
-  font-family: var(--font-display);
-  font-weight: 400;
-  font-size: 22px;
-}
-
 /* ---------- actions + hand ---------- */
 
 .tactions {
@@ -349,13 +428,6 @@
   gap: 10px;
   min-height: 64px;
   padding: 8px var(--gutter);
-}
-.tactions__me {
-  margin-right: auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 700;
 }
 .btn--uno {
   --btn-bg: var(--card-red);
@@ -503,7 +575,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .drawpile--live .drawpile__card:last-of-type,
-  .timer--low .timer__secs {
+  .timer--low .timer__secs,
+  .seat--turn .seat__pile::before {
     animation: none;
   }
 }
